@@ -31,6 +31,7 @@
   "devDependencies": {
     "@lingui/vite-plugin": "^5.3.1",
     "@vitejs/plugin-react": "^4.5.0",
+    "typescript": "^5.8.3",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.1.4"
   }
