@@ -1,14 +1,8 @@
 import { defineConfig } from 'vite'
-import viteTsconfigPaths from 'vite-tsconfig-paths'
 import path from 'path'
-import { lingui } from '@lingui/vite-plugin'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [
-    viteTsconfigPaths(),
-    lingui(),
-  ],
   build: {
     outDir: 'build',
     sourcemap: true,
