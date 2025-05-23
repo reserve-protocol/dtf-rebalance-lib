@@ -1,0 +1,37 @@
+{
+  "name": "@reserve-protocol/dtf-rebalance-lib",
+  "version": "1.0.0",
+  "description": "Rebalancing library for DTFs in typescript",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "test": "npx vitest run"
+  },
+  "keywords": [
+    "typescript",
+    "npm",
+    "package"
+  ],
+  "author": "Reserve Team",
+  "license": "BlueOak-1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reserve-protocol/dtf-rebalance-lib.git"
+  },
+  "bugs": {
+    "url": "https://github.com/reserve-protocol/dtf-rebalance-lib/issues"
+  },
+  "homepage": "https://github.com/reserve-protocol/dtf-rebalance-lib#readme",
+  "dependencies": {
+    "decimal.js-light": "^2.5.1"
+  },
+  "devDependencies": {
+    "@lingui/vite-plugin": "^5.3.1",
+    "@vitejs/plugin-react": "^4.5.0",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.1.4"
+  }
+}
