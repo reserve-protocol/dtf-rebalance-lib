@@ -9,7 +9,8 @@ import {
 import { getBasketDistribution } from '../src/utils'
 import { OpenAuctionArgs, getOpenAuction } from '../src/open-auction'
 import { getStartRebalance } from '../src/start-rebalance'
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, beforeEach } from 'node:test'
+import { strict as assert } from 'node:assert'
 
 const PRECISION = bn('1e3') // 1-part-in-1000
 
@@ -20,15 +21,13 @@ const assertApproxEq = (
 ) => {
   const delta = a > b ? a - b : b - a
   // console.log('assertApproxEq', a.toString(), b.toString()) // Keep for debugging if necessary
-  expect(a).toBeGreaterThanOrEqual(b / precision) // Ensure a is not far below b
-  expect(delta).toBeLessThanOrEqual(b / precision) // Ensure difference is small relative to b
+  assert(a >= b / precision, `Expected ${a} to be >= ${b / precision}`) // Ensure a is not far below b
+  assert(delta <= b / precision, `Expected delta ${delta} to be <= ${b / precision}`) // Ensure difference is small relative to b
   // A more robust check might be delta <= max(abs(a), abs(b)) / precision, or handle b=0
   if (b !== 0n) {
-    expect(delta).toBeLessThanOrEqual(
-      (a > b ? a : b) / precision // Compare delta to the larger of a or b
-    )
+    assert(delta <= (a > b ? a : b) / precision, `Expected delta ${delta} to be <= ${(a > b ? a : b) / precision}`) // Compare delta to the larger of a or b
   } else {
-    expect(delta).toBeLessThanOrEqual(precision) // If b is 0, delta must be small
+    assert(delta <= precision, `Expected delta ${delta} to be <= ${precision}`) // If b is 0, delta must be small
   }
 }
 
@@ -58,15 +57,15 @@ const assertOpenAuctionArgsEqual = (
   b: OpenAuctionArgs,
   precision: bigint = PRECISION
 ) => {
-  expect(a.rebalanceNonce).toBe(b.rebalanceNonce)
-  expect(a.tokens).toEqual(b.tokens)
+  assert.equal(a.rebalanceNonce, b.rebalanceNonce)
+  assert.deepEqual(a.tokens, b.tokens)
 
-  expect(a.newWeights.length).toBe(b.newWeights.length)
+  assert.equal(a.newWeights.length, b.newWeights.length)
   for (let i = 0; i < a.newWeights.length; i++) {
     assertRangesEqual(a.newWeights[i], b.newWeights[i])
   }
 
-  expect(a.newPrices.length).toBe(b.newPrices.length)
+  assert.equal(a.newPrices.length, b.newPrices.length)
   for (let i = 0; i < a.newPrices.length; i++) {
     // assertPricesEqual uses its own default precision, which is fine.
     assertPricesEqual(a.newPrices[i], b.newPrices[i])
@@ -121,7 +120,7 @@ describe('NATIVE DTFs', () => {
       initialPricesS1: PriceRange[],
       initialLimitsS1: RebalanceLimits
 
-    beforeAll(() => {
+    beforeEach(() => {
       const { weights, prices, limits } = getStartRebalance(
         supply,
         tokens,
@@ -149,8 +148,8 @@ describe('NATIVE DTFs', () => {
     })
 
     it('Step 0: Verifies initial setup from getStartRebalance', () => {
-      expect(initialWeightsS1.length).toBe(3)
-      expect(initialPricesS1.length).toBe(3)
+      assert.equal(initialWeightsS1.length, 3)
+      assert.equal(initialPricesS1.length, 3)
       assertRangesEqual(initialWeightsS1[0], {
         low: bn('0'),
         spot: bn('0'),
@@ -463,7 +462,7 @@ describe('NATIVE DTFs', () => {
       initialPricesS2: PriceRange[],
       initialLimitsS2: RebalanceLimits
 
-    beforeAll(() => {
+    beforeEach(() => {
       const { weights, prices, limits } = getStartRebalance(
         supply,
         tokens,
@@ -491,7 +490,7 @@ describe('NATIVE DTFs', () => {
     })
 
     it('Step 0: Verifies initial setup from getStartRebalance', () => {
-      expect(initialWeightsS2.length).toBe(3)
+      assert.equal(initialWeightsS2.length, 3)
       // USDC target 100%
       assertRangesEqual(initialWeightsS2[0], {
         low: bn('9e14'),
@@ -750,8 +749,8 @@ describe('NATIVE DTFs', () => {
       1, // dtfPrice
       true // weightControl: true
     )
-    expect(newWeights.length).toBe(2)
-    expect(newPricesResult.length).toBe(2)
+    assert.equal(newWeights.length, 2)
+    assert.equal(newPricesResult.length, 2)
 
     assertRangesEqual(newWeights[0], {
       // USDC
@@ -826,9 +825,9 @@ describe('NATIVE DTFs', () => {
         prices[0] || 1, // dtfPrice, use first token's price or 1
         true // weightControl: true
       )
-      expect(newWeights.length).toBe(currentTokens.length)
-      expect(newPricesResult.length).toBe(currentTokens.length)
-      expect(newLimitsResult).toBeDefined()
+      assert.equal(newWeights.length, currentTokens.length)
+      assert.equal(newPricesResult.length, currentTokens.length)
+      assert(newLimitsResult !== undefined, 'newLimitsResult should be defined')
     }
   })
 })
@@ -943,7 +942,7 @@ describe('TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence', () => {
       high: bn('1e18'),
     })
     // For TRACKING, newWeights from getOpenAuction are clamped to initialWeightsTracking.spot values
-    expect(openAuctionArgs1.newWeights).toEqual([
+    assert.deepEqual(openAuctionArgs1.newWeights, [
       { low: bn('0'), spot: bn('0'), high: bn('0') },
       { low: bn('5e26'), spot: bn('5e26'), high: bn('5e26') },
       { low: bn('5e14'), spot: bn('5e14'), high: bn('5e14') },
@@ -995,7 +994,7 @@ describe('TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence', () => {
       spot: bn('1e18'),
       high: bn('1.05e18'),
     })
-    expect(openAuctionArgs2.newWeights).toEqual([
+    assert.deepEqual(openAuctionArgs2.newWeights, [
       { low: bn('0'), spot: bn('0'), high: bn('0') },
       { low: bn('5e26'), spot: bn('5e26'), high: bn('5e26') },
       { low: bn('5e14'), spot: bn('5e14'), high: bn('5e14') },
@@ -1048,7 +1047,7 @@ describe('TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence', () => {
       spot: bn('1e18'),
       high: bn('1e18'),
     })
-    expect(openAuctionArgs3.newWeights).toEqual([
+    assert.deepEqual(openAuctionArgs3.newWeights, [
       { low: bn('0'), spot: bn('0'), high: bn('0') },
       { low: bn('5e26'), spot: bn('5e26'), high: bn('5e26') },
       { low: bn('5e14'), spot: bn('5e14'), high: bn('5e14') },
@@ -1132,7 +1131,7 @@ describe('Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)', ()
       spot: bn('1e18'),
       high: bn('1.05e18'),
     })
-    expect(openAuctionArgs.newWeights).toEqual([
+    assert.deepEqual(openAuctionArgs.newWeights, [
       { low: bn('0'), spot: bn('0'), high: bn('0') },
       { low: bn('5e26'), spot: bn('5e26'), high: bn('5e26') },
       { low: bn('5e14'), spot: bn('5e14'), high: bn('5e14') },
@@ -1164,7 +1163,7 @@ describe('Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)', ()
       spot: bn('1e18'),
       high: bn('1.05e18'),
     })
-    expect(openAuctionArgs.newWeights).toEqual([
+    assert.deepEqual(openAuctionArgs.newWeights, [
       { low: bn('0'), spot: bn('0'), high: bn('0') },
       { low: bn('5e26'), spot: bn('5e26'), high: bn('5e26') },
       { low: bn('5e14'), spot: bn('5e14'), high: bn('5e14') },
@@ -1197,7 +1196,7 @@ describe('Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)', ()
       spot: bn('1e18'),
       high: bn('1.2e18'),
     })
-    expect(openAuctionArgsCustomRound1.newWeights).toEqual([
+    assert.deepEqual(openAuctionArgsCustomRound1.newWeights, [
       { low: bn('0'), spot: bn('0'), high: bn('0') },
       { low: bn('5e26'), spot: bn('5e26'), high: bn('5e26') },
       { low: bn('5e14'), spot: bn('5e14'), high: bn('5e14') },
@@ -1232,7 +1231,7 @@ describe('Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)', ()
       spot: bn('1e18'),
       high: bn('1.2e18'),
     })
-    expect(openAuctionArgsCustomRound2.newWeights).toEqual([
+    assert.deepEqual(openAuctionArgsCustomRound2.newWeights, [
       { low: bn('0'), spot: bn('0'), high: bn('0') },
       { low: bn('5e26'), spot: bn('5e26'), high: bn('5e26') },
       { low: bn('5e14'), spot: bn('5e14'), high: bn('5e14') },
@@ -1284,7 +1283,7 @@ describe('Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)', ()
     const spotDAI_D27 = hybridWeights[1].spot // bn('5e26')
     const spotUSDT_D27 = hybridWeights[2].spot // bn('5e14')
 
-    expect(openAuctionArgs.newWeights.length).toBe(3)
+    assert.equal(openAuctionArgs.newWeights.length, 3)
     assertRangesEqual(openAuctionArgs.newWeights[0], hybridWeights[0])
     assertRangesEqual(openAuctionArgs.newWeights[1], {
       low: bn('4.847e26'),
@@ -1330,7 +1329,7 @@ describe('Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)', ()
     // For USDT (index 2), hybridWeights[2].spot is bn('5e14').
     // As deduced, all components of openAuctionArgs.newWeights[2] should also be bn('5e14').
     // Making the assertion explicit with hardcoded values to test exactness.
-    expect(openAuctionArgs.newWeights.length).toBe(3)
+    assert.equal(openAuctionArgs.newWeights.length, 3)
     assertRangesEqual(openAuctionArgs.newWeights[0], hybridWeights[0]) // USDC {0,0,0}
     assertRangesEqual(openAuctionArgs.newWeights[1], {
       low: hybridWeights[1].spot,
@@ -1385,7 +1384,7 @@ describe('Price Clamping Edge Cases in getOpenAuction', () => {
     // So, pricesD27.high for USDC also becomes bn('8.5e20').
     // Thus, pricesD27.low == pricesD27.high, triggering the error.
 
-    expect(() => {
+    assert.throws(() => {
       getOpenAuction(
         mockRebalanceEdge,
         supply,
@@ -1397,6 +1396,8 @@ describe('Price Clamping Edge Cases in getOpenAuction', () => {
         auctionPriceErrorSmall, // USDC error at 0.01
         0.95
       )
-    }).toThrow('no price range')
+    }, {
+      message: 'no price range'
+    })
   })
 })
