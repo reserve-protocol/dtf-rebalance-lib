@@ -104,7 +104,7 @@ export const getStartRebalance = (
 
       // {wholeTok/wholeShare} = {wholeTok/wholeShare} / {1}
       const lowWeight = spotWeight.mul(ONE.sub(ONE.div(ONE.add(priceError[i]))))
-      const highWeight = spotWeight.mul(ONE.sub(ONE.div(ONE.sub(priceError[i]))))
+      const highWeight = spotWeight.mul(ONE.add(priceError[i]))
 
       console.log('weights.low', lowWeight.toString())
       console.log('weights.high', highWeight.toString())
@@ -149,7 +149,7 @@ export const getStartRebalance = (
 
     // D18{BU/share} = {1} * D18 * {BU/share}
     newLimits.low = bn(ONE.sub(ONE.div(ONE.add(totalPortion))).mul(D18d))
-    newLimits.high = bn(ONE.sub(ONE.div(ONE.sub(totalPortion))).mul(D18d))
+    newLimits.high = bn(ONE.add(totalPortion).mul(D18d))
   }
 
   return {
