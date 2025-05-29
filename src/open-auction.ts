@@ -373,8 +373,15 @@ export const getOpenAuction = (
 
   // get new prices, constrained by extremes
 
+  
   // D27{USD/tok}
   const newPrices = rebalance.initialPrices.map((initialPrice, i) => {
+    // revert if price out of bounds
+    const spotPrice = bn(prices[i].mul(D27d).div(decimalScale[i]))
+    if (spotPrice < initialPrice.low || spotPrice > initialPrice.high) {
+      throw new Error('spot price out of bounds! auction launcher MUST closeRebalance to prevent loss!')
+    }
+
     if (rebalance.priceControl == PriceControl.NONE) {
       return initialPrice
     }
@@ -388,6 +395,7 @@ export const getOpenAuction = (
         prices[i].div(ONE.sub(priceError[i])).mul(D27d).div(decimalScale[i])
       ),
     }
+    
 
     // low
     if (pricesD27.low < initialPrice.low) {

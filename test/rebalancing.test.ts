@@ -1344,18 +1344,18 @@ describe('Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)', ()
   })
 })
 
-describe('Price Clamping Edge Cases in getOpenAuction', () => {
+describe('Price Edge Cases in getOpenAuction', () => {
   const supply = bn('1e21')
   const tokens = ['USDC', 'DAI']
   const decimals = [bn('6'), bn('18')]
   const auctionPriceErrorSmall = [0.01, 0.01]
   const targetBasketSimple = [bn('5e17'), bn('5e17')] // 50% USDC, 50% DAI
-  const currentMarketPrices = [1, 1]
   const folioSimple = [bn('5e5'), bn('5e17')] // Example folio, value $1
 
-  it('should throw "no price range" if current price forces new low > initial high, and new high clamps to initial high', () => {
+  it('should throw "spot price out of bounds!" when market price is outside initial price bounds', () => {
+    // Set up narrow initial price bounds that are below the market price
     const initialPricesNarrowUSDC: PriceRange[] = [
-      { low: bn('8e20'), high: bn('8.5e20') }, // USDC: Narrow, low range (0.8 - 0.85)
+      { low: bn('8e20'), high: bn('8.5e20') }, // USDC: Range 0.8 - 0.85 USD
       { low: bn('9e8'), high: bn('1.11111e9') }, // DAI: Normal range
     ]
 
@@ -1375,14 +1375,11 @@ describe('Price Clamping Edge Cases in getOpenAuction', () => {
       priceControl: PriceControl.PARTIAL,
     }
 
-    // Current USDC market price is $1.0, auction error 0.01
-    // Calculated pricesD27.low for USDC (based on $1.0 * 0.99 = $0.99) would be bn('9.9e20').
-    // This is > initialPricesNarrowUSDC[0].high (bn('8.5e20')).
-    // So, pricesD27.low for USDC becomes bn('8.5e20').
-    // Calculated pricesD27.high for USDC (based on $1.0 / 0.99 = $1.0101) would be bn('1.01010e21').
-    // This is > initialPricesNarrowUSDC[0].high (bn('8.5e20')).
-    // So, pricesD27.high for USDC also becomes bn('8.5e20').
-    // Thus, pricesD27.low == pricesD27.high, triggering the error.
+    // Market price is $1.0, but initial bounds are only 0.8-0.85
+    // spotPrice = 1.0 * 1e27 / 1e6 = 1e21
+    // initialPrice.high = 8.5e20
+    // Since 1e21 > 8.5e20, this triggers "spot price out of bounds!"
+    const currentMarketPrices = [1.0, 1.0] // USDC at $1.0 is above the 0.8-0.85 range
 
     assert.throws(() => {
       getOpenAuction(
@@ -1392,8 +1389,56 @@ describe('Price Clamping Edge Cases in getOpenAuction', () => {
         targetBasketSimple,
         folioSimple, // current _folio
         decimals,
-        currentMarketPrices, // USDC price at $1.0
-        auctionPriceErrorSmall, // USDC error at 0.01
+        currentMarketPrices,
+        auctionPriceErrorSmall,
+        0.95
+      )
+    }, {
+      message: 'spot price out of bounds! auction launcher MUST closeRebalance to prevent loss!'
+    })
+  })
+
+  it('should throw "no price range" when price clamping results in identical low and high prices', () => {
+    // Set up initial price bounds where low == high (degenerate range)
+    const initialPricesSameValue: PriceRange[] = [
+      { low: bn('1e21'), high: bn('1e21') }, // USDC: Exactly $1.0 (no range)
+      { low: bn('9e8'), high: bn('1.11111e9') }, // DAI: Normal range
+    ]
+
+    const mockRebalanceEdge: Rebalance = {
+      nonce: 5n,
+      tokens: tokens,
+      weights: [
+        { low: bn('4.5e14'), spot: bn('5e14'), high: bn('5.5e14') },
+        { low: bn('4.5e26'), spot: bn('5e26'), high: bn('5.5e26') },
+      ],
+      initialPrices: initialPricesSameValue,
+      inRebalance: tokens.map(() => true),
+      limits: { low: bn('1'), spot: bn('1e18'), high: bn('1e36') }, // Wide limits
+      startedAt: 0n,
+      restrictedUntil: 0n,
+      availableUntil: 0n,
+      priceControl: PriceControl.PARTIAL,
+    }
+
+    // Market price is $1.0, which matches the initial price bounds exactly
+    // spotPrice = 1.0 * 1e27 / 1e6 = 1e21 == initialPrice.low == initialPrice.high ✓
+    // But when we calculate pricesD27 with price error:
+    // pricesD27.low = 1.0 * 0.99 * 1e27 / 1e6 = 9.9e20, gets clamped to 1e21
+    // pricesD27.high = 1.0 / 0.99 * 1e27 / 1e6 ≈ 1.0101e21, gets clamped to 1e21
+    // Result: pricesD27.low == pricesD27.high == 1e21, triggering "no price range"
+    const currentMarketPrices = [1.0, 1.0]
+
+    assert.throws(() => {
+      getOpenAuction(
+        mockRebalanceEdge,
+        supply,
+        folioSimple, // _initialFolio
+        targetBasketSimple,
+        folioSimple, // current _folio
+        decimals,
+        currentMarketPrices,
+        auctionPriceErrorSmall,
         0.95
       )
     }, {

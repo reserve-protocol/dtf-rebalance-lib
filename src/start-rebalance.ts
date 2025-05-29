@@ -26,7 +26,7 @@ export interface StartRebalanceArgsPartial {
  * @param _prices {USD/wholeTok} USD prices for each *whole* token
  * @param _priceError {1} Price error per token to use in the rebalanc; should be larger than price error during openAuction
  * @param _dtfPrice {USD/wholeShare} DTF price
- * @param weightControl WeightControl.NONE or WeightControl.SOME
+ * @param weightControl TRACKING=false, NATIVE=true
  */
 export const getStartRebalance = (
   _supply: bigint,
