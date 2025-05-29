@@ -83,9 +83,9 @@ describe('NATIVE DTFs', () => {
   // when market prices are [1,1,1], auctionPriceError is [0.01,0.01,0.01], and priceControl=true,
   // and initialPrices allow this range.
   const defaultExpectedPrices_USDC_DAI_USDT: PriceRange[] = [
-    { low: bn('9.9e20'), high: bn('1.01010e21') }, // USDC (D27 from $1, 6dec)
-    { low: bn('9.9e8'), high: bn('1.01010e9') }, // DAI (D27 from $1, 18dec)
-    { low: bn('9.9e20'), high: bn('1.01010e21') }, // USDT (D27 from $1, 6dec)
+    { low: bn('9.9e20'), high: bn('1.01e21') }, // USDC (D27 from $1, 6dec)
+    { low: bn('9.9e8'), high: bn('1.01e9') }, // DAI (D27 from $1, 18dec)
+    { low: bn('9.9e20'), high: bn('1.01e21') }, // USDT (D27 from $1, 6dec)
   ]
 
   describe('Rebalancing from 100% USDC to 0% USDC, 50% DAI, 50% USDT', () => {
@@ -156,14 +156,14 @@ describe('NATIVE DTFs', () => {
         high: bn('0'),
       }) // USDC
       assertRangesEqual(initialWeightsS1[1], {
-        low: bn('4.5e26'),
-        spot: bn('5e26'),
-        high: bn('5.55556e26'),
+        low: bn('454545454545454545454545455'), // 0.5 / 1.1 * 1e27
+        spot: bn('500000000000000000000000000'), // 0.5 * 1e27
+        high: bn('550000000000000000000000000'), // 0.5 * 1.1 * 1e27
       }) // DAI
       assertRangesEqual(initialWeightsS1[2], {
-        low: bn('4.5e14'),
-        spot: bn('5e14'),
-        high: bn('5.55556e14'),
+        low: bn('454545454545455'), // 0.5 / 1.1 * 1e15
+        spot: bn('500000000000000'), // 0.5 * 1e15
+        high: bn('550000000000000'), // 0.5 * 1.1 * 1e15
       }) // USDT
       assertRebalanceLimitsEqual(initialLimitsS1, {
         low: bn('1e18'),
@@ -338,9 +338,9 @@ describe('NATIVE DTFs', () => {
         finalStageAtForTest
       )
       const expectedNewPricesLoss: PriceRange[] = [
-        { low: bn('9e20'), high: bn('9.09091e20') },
-        { low: bn('9.9e8'), high: bn('1.01010e9') },
-        { low: bn('9.9e20'), high: bn('1.01010e21') },
+        { low: bn('9e20'), high: bn('9.09e20') },
+        { low: bn('9.9e8'), high: bn('1.01e9') },
+        { low: bn('9.9e20'), high: bn('1.01e21') },
       ]
       // Ideal spots for DAI/USDT scaled by 0.9 (due to USDC price drop impacting shareValue for idealWeight calc)
       // DAI idealSpot was 5e26, now 5e26*0.9 = 4.5e26. USDT idealSpot was 5e14, now 5e14*0.9 = 4.5e14.
@@ -351,8 +351,8 @@ describe('NATIVE DTFs', () => {
         tokens: tokens,
         newWeights: [
           initialWeightsS1[0], // USDC target 0
-          { low: bn('4.5e26'), spot: bn('4.5e26'), high: bn('4.5e26') },
-          { low: bn('4.5e14'), spot: bn('4.5e14'), high: bn('4.5e14') },
+          { low: bn('454545454545454545454545455'), spot: bn('454545454545454545454545455'), high: bn('454545454545454545454545455') },
+          { low: bn('454545454545455'), spot: bn('454545454545455'), high: bn('454545454545455') },
         ],
         newPrices: expectedNewPricesLoss,
         newLimits: initialLimitsS1,
@@ -493,9 +493,9 @@ describe('NATIVE DTFs', () => {
       assert.equal(initialWeightsS2.length, 3)
       // USDC target 100%
       assertRangesEqual(initialWeightsS2[0], {
-        low: bn('9e14'),
-        spot: bn('1e15'),
-        high: bn('1.11111e15'),
+        low: bn('909090909090909'), // 1.0 / 1.1 * 1e15
+        spot: bn('1000000000000000'), // 1.0 * 1e15
+        high: bn('1100000000000000'), // 1.0 * 1.1 * 1e15
       })
       assertRangesEqual(initialWeightsS2[1], {
         low: bn('0'),
@@ -635,9 +635,9 @@ describe('NATIVE DTFs', () => {
       // idealSpotWeight_USDC = shareValue * targetBasket_USDC[0] / actualLimits.spot / prices_USDC[0.9]
       // idealSpot_USDC_D27 was 1e15 at price 1. At price 0.9, idealSpot_D27 becomes 1e15 / 0.9 = 1.111...e15.
       const expectedNewPricesGainUSDC: PriceRange[] = [
-        { low: bn('9e20'), high: bn('9.09091e20') },
-        { low: bn('9.9e8'), high: bn('1.01010e9') },
-        { low: bn('9.9e20'), high: bn('1.01010e21') },
+        { low: bn('9e20'), high: bn('9.09e20') },
+        { low: bn('9.9e8'), high: bn('1.01e9') },
+        { low: bn('9.9e20'), high: bn('1.01e21') },
       ]
       // This new ideal spot (1.111...e15) is clamped by initialWeightsS2[0].high (1.11111e15).
       assertOpenAuctionArgsEqual(openAuctionArgs, {
@@ -645,9 +645,9 @@ describe('NATIVE DTFs', () => {
         tokens: tokens,
         newWeights: [
           {
-            low: bn('1.11111e15'),
-            spot: bn('1.11111e15'),
-            high: bn('1.11111e15'),
+            low: bn('1100000000000000'),
+            spot: bn('1100000000000000'),
+            high: bn('1100000000000000'),
           },
           initialWeightsS2[1],
           initialWeightsS2[2],
@@ -677,9 +677,9 @@ describe('NATIVE DTFs', () => {
       // Expected: rebalanceTarget=1, delta=0. idealWeight for USDC changes.
       // idealSpot_USDC_D27 was 1e15 at price 1. At price 1.1, idealSpot_D27 becomes 1e15 / 1.1 = 9.09091e14.
       const expectedNewPricesLossUSDC: PriceRange[] = [
-        { low: bn('1.089e21'), high: bn('1.11111e21') },
-        { low: bn('9.9e8'), high: bn('1.01010e9') },
-        { low: bn('9.9e20'), high: bn('1.01010e21') },
+        { low: bn('1.089e21'), high: bn('1.1e21') },
+        { low: bn('9.9e8'), high: bn('1.01e9') },
+        { low: bn('9.9e20'), high: bn('1.01e21') },
       ]
       // This new ideal spot (9.09091e14) is clamped by initialWeightsS2[0].low (9e14), so becomes 9.09091e14.
       assertOpenAuctionArgsEqual(openAuctionArgs, {
@@ -687,9 +687,9 @@ describe('NATIVE DTFs', () => {
         tokens: tokens,
         newWeights: [
           {
-            low: bn('9.09091e14'),
-            spot: bn('9.09091e14'),
-            high: bn('9.09091e14'),
+            low: bn('909090909090909'),
+            spot: bn('909090909090909'),
+            high: bn('909090909090909'),
           },
           initialWeightsS2[1],
           initialWeightsS2[2],
@@ -719,7 +719,7 @@ describe('NATIVE DTFs', () => {
         rebalanceNonce: 2n,
         tokens: tokens,
         newWeights: [
-          { low: bn('9e14'), spot: bn('9e14'), high: bn('9e14') },
+          { low: bn('909090909090909'), spot: bn('909090909090909'), high: bn('909090909090909') },
           initialWeightsS2[1],
           initialWeightsS2[2],
         ],
@@ -754,24 +754,24 @@ describe('NATIVE DTFs', () => {
 
     assertRangesEqual(newWeights[0], {
       // USDC
-      low: bn('6.75e14'),
-      spot: bn('7.5e14'),
-      high: bn('8.33333e14'),
+      low: bn('681818181818182'), // 0.75 / 1.1 * 1e15
+      spot: bn('750000000000000'), // 0.75 * 1e15
+      high: bn('825000000000000'), // 0.75 * 1.1 * 1e15
     })
     assertRangesEqual(newWeights[1], {
       // ETH
-      low: bn('7.5e22'), // spot * 0.9
-      spot: bn('8.33333e22'), // 0.25/3000 * 1e27
-      high: bn('9.25926e22'), // spot / 0.9
+      low: bn('75757575757575757575758'), // (0.25/3000) / 1.1 * 1e27
+      spot: bn('83333333333333333333333'), // (0.25/3000) * 1e27
+      high: bn('91666666666666666666667'), // (0.25/3000) * 1.1 * 1e27
     })
 
     assertPricesEqual(newPricesResult[0], {
-      low: bn('9e20'),
-      high: bn('1.11111e21'),
+      low: bn('9e20'), // 1 * 0.9 * 1e21
+      high: bn('1100000000000000000000'), // 1 * 1.1 * 1e21
     })
     assertPricesEqual(newPricesResult[1], {
-      low: bn('2.7e12'), // 3000 * 0.9 * 1e9
-      high: bn('3.33333e12'), // (3000 / 0.9) * 1e9
+      low: bn('2700000000000'), // 3000 * 0.9 * 1e9
+      high: bn('3300000000000'), // 3000 * 1.1 * 1e9
     })
     assertRebalanceLimitsEqual(newLimitsResult, {
       low: bn('1e18'),
@@ -863,12 +863,12 @@ describe('TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence', () => {
 
   it('Step 0: Verifies initial setup from getStartRebalance (TRACKING)', () => {
     // totalPortion = (0*0.1) + (0.5*0.1) + (0.5*0.1) = 0.1
-    // expectedLowLimit = (1 - 0.1) * 1e18 = 9e17
-    // expectedHighLimit = (1 / (1 - 0.1)) * 1e18 = 1.11111e18
+    // expectedLowLimit = (1 / (1 + 0.1)) * 1e18 = (1/1.1) * 1e18
+    // expectedHighLimit = (1 + 0.1) * 1e18 = 1.1 * 1e18
     assertRebalanceLimitsEqual(initialLimitsTracking, {
-      low: bn('9e17'),
-      spot: bn('1e18'),
-      high: bn('1.11111e18'),
+      low: bn('909090909090909091'), // (1/1.1) * 1e18
+      spot: bn('1000000000000000000'),
+      high: bn('1100000000000000000'), // 1.1 * 1e18
     })
 
     // For TRACKING, weights low/spot/high are identical
@@ -890,16 +890,16 @@ describe('TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence', () => {
 
     // Prices are same as NATIVE calculation initially
     assertPricesEqual(initialPricesTracking[0], {
-      low: bn('9e20'),
-      high: bn('1.11111e21'),
+      low: bn('9e20'), // 1 * 0.9 * 1e21
+      high: bn('1100000000000000000000'), // 1 * 1.1 * 1e21
     })
     assertPricesEqual(initialPricesTracking[1], {
-      low: bn('9e8'),
-      high: bn('1.11111e9'),
+      low: bn('900000000'), // 1 * 0.9 * 1e9
+      high: bn('1100000000'), // 1 * 1.1 * 1e9
     })
     assertPricesEqual(initialPricesTracking[2], {
-      low: bn('9e20'),
-      high: bn('1.11111e21'),
+      low: bn('9e20'), // 1 * 0.9 * 1e21
+      high: bn('1100000000000000000000'), // 1 * 1.1 * 1e21
     })
   })
 
@@ -949,9 +949,9 @@ describe('TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence', () => {
     ])
 
     const expectedNewPrices1: PriceRange[] = [
-      { low: bn('9.9e20'), high: bn('1.01010e21') }, // USDC
-      { low: bn('9.9e8'), high: bn('1.01010e9') }, // DAI
-      { low: bn('9.9e20'), high: bn('1.01010e21') }, // USDT
+      { low: bn('9.9e20'), high: bn('1.01e21') }, // USDC
+      { low: bn('9.9e8'), high: bn('1.01e9') }, // DAI
+      { low: bn('9.9e20'), high: bn('1.01e21') }, // USDT
     ]
     assertPricesEqual(openAuctionArgs1.newPrices[0], expectedNewPrices1[0])
     assertPricesEqual(openAuctionArgs1.newPrices[1], expectedNewPrices1[1])
@@ -1002,15 +1002,15 @@ describe('TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence', () => {
     // Prices same as step 1 if market prices didn't change
     assertPricesEqual(openAuctionArgs2.newPrices[0], {
       low: bn('9.9e20'),
-      high: bn('1.01010e21'),
+      high: bn('1.01e21'),
     })
     assertPricesEqual(openAuctionArgs2.newPrices[1], {
       low: bn('9.9e8'),
-      high: bn('1.01010e9'),
+      high: bn('1.01e9'),
     })
     assertPricesEqual(openAuctionArgs2.newPrices[2], {
       low: bn('9.9e20'),
-      high: bn('1.01010e21'),
+      high: bn('1.01e21'),
     })
   })
 
@@ -1055,15 +1055,15 @@ describe('TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence', () => {
     // Prices same as step 1 if market prices didn't change
     assertPricesEqual(openAuctionArgs3.newPrices[0], {
       low: bn('9.9e20'),
-      high: bn('1.01010e21'),
+      high: bn('1.01e21'),
     })
     assertPricesEqual(openAuctionArgs3.newPrices[1], {
       low: bn('9.9e8'),
-      high: bn('1.01010e9'),
+      high: bn('1.01e9'),
     })
     assertPricesEqual(openAuctionArgs3.newPrices[2], {
       low: bn('9.9e20'),
-      high: bn('1.01010e21'),
+      high: bn('1.01e21'),
     })
   })
 })
@@ -1104,9 +1104,9 @@ describe('Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)', ()
   const currentMarketPrices_Hybrid = [1, 1, 1] // Defined for this scope
 
   const defaultPricesHybridScope: PriceRange[] = [
-    { low: bn('9.9e20'), high: bn('1.01010e21') }, // USDC
-    { low: bn('9.9e8'), high: bn('1.01010e9') }, // DAI
-    { low: bn('9.9e20'), high: bn('1.01010e21') }, // USDT
+    { low: bn('9.9e20'), high: bn('1.01e21') }, // USDC
+    { low: bn('9.9e8'), high: bn('1.01e9') }, // DAI
+    { low: bn('9.9e20'), high: bn('1.01e21') }, // USDT
   ]
 
   it('Hybrid Scenario 1: Mid-Rebalance (progression < finalStageAt)', () => {
