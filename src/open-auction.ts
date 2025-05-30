@@ -112,7 +112,6 @@ export const getOpenAuction = (
   _priceError: number[],
   _finalStageAt: number = 0.9
 ): [OpenAuctionArgs, AuctionMetrics] => {
-  console.log('getOpenAuction')
 
   if (
     rebalance.tokens.length != _targetBasket.length ||
@@ -177,6 +176,7 @@ export const getOpenAuction = (
 
   const finalStageAt = new Decimal(_finalStageAt.toString())
 
+
   // ================================================================
 
   // calculate ideal spot limit, the actual BU<->share ratio
@@ -190,6 +190,7 @@ export const getOpenAuction = (
   const buValue = weightRanges
     .map((weightRange, i) => weightRange.spot.mul(prices[i]))
     .reduce((a, b) => a.add(b))
+
 
   // ================================================================
 
@@ -207,6 +208,7 @@ export const getOpenAuction = (
     .map((i) => folio[i].mul(prices[i]))
     .reduce((a, b) => a.add(b), ZERO)
     .div(shareValue)
+
 
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   let progression = folio
@@ -246,6 +248,7 @@ export const getOpenAuction = (
     progression = initialProgression // don't go backwards
   }
 
+  
   // {1} = {1} / {1}
   const relativeProgression = initialProgression.eq(ONE)
     ? ONE
@@ -278,6 +281,7 @@ export const getOpenAuction = (
 
   // {wholeBU/wholeShare} = {USD/wholeShare} / {USD/wholeBU}
   const spotLimit = shareValue.div(buValue)
+
 
   // D18{BU/share} = {wholeBU/wholeShare} * D18 * {1}
   const newLimits = {

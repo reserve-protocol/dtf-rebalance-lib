@@ -40,9 +40,6 @@ export const getStartRebalance = (
 ): StartRebalanceArgsPartial => {
   // convert price number inputs to bigints
 
-  // {wholeShare}
-  const supply = new Decimal(_supply.toString()).div(D18d)
-
   // {USD/wholeTok}
   const prices = _prices.map((a) => new Decimal(a.toString()))
 
@@ -56,11 +53,6 @@ export const getStartRebalance = (
 
   // {1}
   const priceError = _priceError.map((a) => new Decimal(a.toString()))
-
-  // {USD} = {USD/wholeShare} * {wholeShare}
-  const sharesValue = dtfPrice.mul(supply)
-
-  console.log('sharesValue', sharesValue.toString())
 
   // ================================================================
 
@@ -81,13 +73,10 @@ export const getStartRebalance = (
 
     // === newWeights ===
 
-    console.log('------------------------------------------------------------')
-    console.log('token', tokens[i])
 
     // {wholeTok/wholeShare} = {1} * {USD/wholeShare} / {USD/wholeTok}
     const spotWeight = targetBasket[i].mul(dtfPrice).div(prices[i])
 
-    console.log('weights.spot', spotWeight.toString())
 
     // D27{tok/share}{wholeShare/wholeTok} = D27 * {tok/wholeTok} / {share/wholeShare}
     const limitMultiplier = D27d.mul(new Decimal(`1e${decimals[i]}`)).div(D18d)
@@ -106,8 +95,6 @@ export const getStartRebalance = (
       const lowWeight = spotWeight.mul(ONE.div(ONE.add(priceError[i])))
       const highWeight = spotWeight.mul(ONE.add(priceError[i]))
 
-      console.log('weights.low', lowWeight.toString())
-      console.log('weights.high', highWeight.toString())
 
       // D27{tok/share} = {wholeTok/wholeShare} * D27{tok/share}{wholeShare/wholeTok} / {BU/share}
       newWeights.push({
@@ -126,8 +113,6 @@ export const getStartRebalance = (
     const lowPrice = prices[i].mul(ONE.sub(priceError[i]))
     const highPrice = prices[i].mul(ONE.add(priceError[i]))
 
-    console.log('price.low', lowPrice.toString())
-    console.log('price.high', highPrice.toString())
 
     // D27{USD/tok} = {USD/wholeTok} * D27{wholeTok/tok}
     newPrices.push({
