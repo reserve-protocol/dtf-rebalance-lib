@@ -1,6 +1,6 @@
 import Decimal from 'decimal.js-light'
 
-import { bn, D18d, D27d, ONE } from './numbers'
+import { bn, D18d, D27d, ONE, ZERO } from './numbers'
 
 import { PriceRange, RebalanceLimits, WeightRange } from './types'
 
@@ -42,6 +42,11 @@ export const getStartRebalance = (
 
   // {USD/wholeTok}
   const prices = _prices.map((a) => new Decimal(a.toString()))
+  for (let i = 0; i < prices.length; i++) {
+    if (prices[i].eq(ZERO)) {
+      throw new Error(`missing price for token ${tokens[i]}`)
+    }
+  }
 
   // {USD/wholeShare}
   const dtfPrice = new Decimal(_dtfPrice)

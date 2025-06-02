@@ -139,6 +139,11 @@ export const getOpenAuction = (
 
   // {USD/wholeTok}
   const prices = _prices.map((a) => new Decimal(a))
+  for (let i = 0; i < prices.length; i++) {
+    if (prices[i].eq(ZERO)) {
+      throw new Error(`missing price for token ${rebalance.tokens[i]}`)
+    }
+  }
 
   // {1}
   const priceError = _priceError.map((a) => new Decimal(a.toString()))
