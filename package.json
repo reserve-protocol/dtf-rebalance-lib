@@ -1,12 +1,19 @@
 {
   "name": "@reserve-protocol/dtf-rebalance-lib",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Rebalancing library for DTFs in typescript",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "LICENSE.md",
+    "README.md"
+  ],
   "scripts": {
-    "build": "tsc",
+    "install": "rm -rf dist",
+    "build": "npm run clean && tsc",
     "prepublishOnly": "npm run build",
     "test": "tsc --project tsconfig.test.json && node --test dist/test/*.test.js"
   },
