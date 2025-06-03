@@ -123,7 +123,7 @@ export const getOpenAuction = (
     throw new Error('length mismatch')
   }
 
-  if (_finalStageAt >= 1) {
+  if (_finalStageAt > 1) {
     throw new Error('finalStageAt must be less than 1')
   }
 
