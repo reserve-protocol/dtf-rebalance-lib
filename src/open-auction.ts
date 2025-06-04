@@ -266,7 +266,7 @@ export const getOpenAuction = (
   if (portionBeingEjected.gte(1e-4)) {
     round = AuctionRound.EJECT
 
-    rebalanceTarget = progression.add(portionBeingEjected.mul(1.5)) // set rebalanceTarget to 50% more than needed, to ensure ejection completes
+    rebalanceTarget = progression.add(portionBeingEjected.mul(1.2)) // set rebalanceTarget to 20% more than needed to ensure ejection completes
     if (rebalanceTarget.gt(ONE)) {
       rebalanceTarget = ONE
     }
@@ -276,7 +276,7 @@ export const getOpenAuction = (
 
     rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt))
     if (rebalanceTarget.gte(ONE)) {
-      round = AuctionRound.FINAL
+      throw new Error('something has gone very wrong')
     }
   }
 
