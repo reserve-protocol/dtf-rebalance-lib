@@ -425,7 +425,7 @@ export const getOpenAuction = (
       pricesD27.high = initialPrice.high
     }
 
-    if (pricesD27.low == pricesD27.high) {
+    if (pricesD27.low == pricesD27.high && priceError[i].gt(ZERO)) {
       throw new Error('no price range')
     }
 
