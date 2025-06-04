@@ -274,7 +274,10 @@ export const getOpenAuction = (
     // wiggle room to prevent having to re-run an auction at the same stage after price movement
     round = AuctionRound.PROGRESS
 
-    rebalanceTarget = finalStageAt
+    rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt))
+    if (rebalanceTarget.gte(ONE)) {
+      round = AuctionRound.FINAL
+    }
   }
 
   // {1}
