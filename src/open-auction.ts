@@ -110,7 +110,7 @@ export const getOpenAuction = (
   _decimals: bigint[],
   _prices: number[],
   _priceError: number[],
-  _finalStageAt: number = 0.9,
+  _finalStageAt: number,
   logging: boolean = false
 ): [OpenAuctionArgs, AuctionMetrics] => {
   if (logging) {
