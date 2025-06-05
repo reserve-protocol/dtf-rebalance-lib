@@ -291,7 +291,7 @@ export const getOpenAuction = (
     round = AuctionRound.PROGRESS
     
     rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt))
-    if (rebalanceTarget.gte(ONE)) {
+    if (rebalanceTarget.gt(ONE)) {
       throw new Error('something has gone very wrong')
     }
   }
