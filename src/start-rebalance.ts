@@ -37,7 +37,7 @@ export const getStartRebalance = (
   _priceError: number[],
   _dtfPrice: number,
   weightControl: boolean,
-  logging: boolean = false
+  logging?: boolean
 ): StartRebalanceArgsPartial => {
   if (logging) {
     console.log('getStartRebalance', _supply, tokens, decimals, _targetBasket, _prices, _priceError, _dtfPrice, weightControl)

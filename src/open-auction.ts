@@ -111,7 +111,7 @@ export const getOpenAuction = (
   _prices: number[],
   _priceError: number[],
   _finalStageAt: number,
-  logging: boolean = false
+  logging?: boolean
 ): [OpenAuctionArgs, AuctionMetrics] => {
   if (logging) {
     console.log('getOpenAuction', rebalance, _supply, _initialFolio, _targetBasket, _folio, _decimals, _prices, _priceError, _finalStageAt)
