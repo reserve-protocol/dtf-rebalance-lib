@@ -281,21 +281,27 @@ export const getOpenAuction = (
   // make it an eject auction if there is 1 bps or more of value to eject
   if (portionBeingEjected.gte(1e-4)) {
     round = AuctionRound.EJECT
-    
+
     rebalanceTarget = progression.add(portionBeingEjected.mul(1.2)) // set rebalanceTarget to 20% more than needed to ensure ejection completes
-    if (rebalanceTarget.gt(ONE)) {
-      rebalanceTarget = ONE
-    }
+    if (rebalanceTarget.gte(ONE)) {
+      rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt))
+    } 
   } else if (relativeProgression.lt(finalStageAt.sub(0.02))) {
-    // wiggle room to prevent having to re-run an auction at the same stage after price movement
-    round = AuctionRound.PROGRESS
-    
-    rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt))
-    if (rebalanceTarget.gt(ONE)) {
-      throw new Error('something has gone very wrong')
-    }
+      // wiggle room to prevent having to re-run an auction at the same stage after price movement
+      round = AuctionRound.PROGRESS
+      
+      rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt))
+      if (rebalanceTarget.gt(ONE)) {
+        throw new Error('something has gone very wrong')
+      }
   }
   
+  if (rebalanceTarget.lt(progression)) {
+      rebalanceTarget = ONE
+  } else if (rebalanceTarget.eq(ONE)) {
+    round = AuctionRound.FINAL
+  }
+
   if (logging) {
     console.log('rebalanceTarget', rebalanceTarget.toString())
   }
