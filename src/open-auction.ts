@@ -269,6 +269,14 @@ export const getOpenAuction = (
   
   let rebalanceTarget = ONE
   let round: AuctionRound = AuctionRound.FINAL
+
+  if (logging) {
+    console.log('initialProgression', initialProgression.toString())
+    console.log('progression', progression.toString())
+    console.log('relativeProgression', relativeProgression.toString())
+    console.log('portionBeingEjected', portionBeingEjected.toString())
+    console.log('finalStageAt', finalStageAt.toString())
+  }
   
   // make it an eject auction if there is 1 bps or more of value to eject
   if (portionBeingEjected.gte(1e-4)) {
@@ -290,11 +298,6 @@ export const getOpenAuction = (
   
   if (logging) {
     console.log('rebalanceTarget', rebalanceTarget.toString())
-    console.log('initialProgression', initialProgression.toString())
-    console.log('progression', progression.toString())
-    console.log('relativeProgression', relativeProgression.toString())
-    console.log('portionBeingEjected', portionBeingEjected.toString())
-    console.log('finalStageAt', finalStageAt.toString())
   }
 
   // {1}
