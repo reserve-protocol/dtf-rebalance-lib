@@ -36,8 +36,13 @@ export const getStartRebalance = (
   _prices: number[],
   _priceError: number[],
   _dtfPrice: number,
-  weightControl: boolean
+  weightControl: boolean,
+  logging: boolean = false
 ): StartRebalanceArgsPartial => {
+  if (logging) {
+    console.log('getStartRebalance', _supply, tokens, decimals, _targetBasket, _prices, _priceError, _dtfPrice, weightControl)
+  }
+
   // convert price number inputs to bigints
 
   // {USD/wholeTok}
@@ -86,6 +91,10 @@ export const getStartRebalance = (
     // D27{tok/share}{wholeShare/wholeTok} = D27 * {tok/wholeTok} / {share/wholeShare}
     const limitMultiplier = D27d.mul(new Decimal(`1e${decimals[i]}`)).div(D18d)
 
+    if (logging) {
+      console.log('limitMultiplier', limitMultiplier.toString())
+    }
+
     if (!weightControl) {
       // D27{tok/BU} = {wholeTok/wholeShare} * D27{tok/share}{wholeShare/wholeTok} / {BU/share}
       newWeights.push({
@@ -125,21 +134,27 @@ export const getStartRebalance = (
       high: bn(highPrice.mul(priceMultiplier)),
     })
   }
-
+  
   // update low/high for tracking DTFs
   if (!weightControl) {
     // sum of dot product of targetBasket and priceError
     const totalPortion = targetBasket
-      .map((portion: Decimal, i: number) => portion.mul(priceError[i]))
-      .reduce((a: Decimal, b: Decimal) => a.add(b))
-
+    .map((portion: Decimal, i: number) => portion.mul(priceError[i]))
+    .reduce((a: Decimal, b: Decimal) => a.add(b))
+    
     if (totalPortion.gte(ONE)) {
       throw new Error('totalPortion > 1')
     }
-
+    
     // D18{BU/share} = {1} * D18 * {BU/share}
     newLimits.low = bn(ONE.div(ONE.add(totalPortion)).mul(D18d))
     newLimits.high = bn(ONE.add(totalPortion).mul(D18d))
+  }
+  
+  if (logging) {
+    console.log("newWeights", newWeights)
+    console.log('newPrices', newPrices)
+    console.log('newLimits', newLimits)
   }
 
   return {

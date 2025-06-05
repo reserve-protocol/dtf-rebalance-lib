@@ -110,8 +110,12 @@ export const getOpenAuction = (
   _decimals: bigint[],
   _prices: number[],
   _priceError: number[],
-  _finalStageAt: number = 0.9
+  _finalStageAt: number = 0.9,
+  logging: boolean = false
 ): [OpenAuctionArgs, AuctionMetrics] => {
+  if (logging) {
+    console.log('getOpenAuction', rebalance, _supply, _initialFolio, _targetBasket, _folio, _decimals, _prices, _priceError, _finalStageAt)
+  }
 
   if (
     rebalance.tokens.length != _targetBasket.length ||
@@ -196,6 +200,10 @@ export const getOpenAuction = (
     .map((weightRange, i) => weightRange.spot.mul(prices[i]))
     .reduce((a, b) => a.add(b))
 
+  if (logging) {
+    console.log('shareValue', shareValue.toString())
+    console.log('buValue', buValue.toString())
+  }
 
   // ================================================================
 
@@ -252,20 +260,20 @@ export const getOpenAuction = (
   if (progression < initialProgression) {
     progression = initialProgression // don't go backwards
   }
-
+  
   
   // {1} = {1} / {1}
   const relativeProgression = initialProgression.eq(ONE)
-    ? ONE
-    : progression.sub(initialProgression).div(ONE.sub(initialProgression))
-
+  ? ONE
+  : progression.sub(initialProgression).div(ONE.sub(initialProgression))
+  
   let rebalanceTarget = ONE
   let round: AuctionRound = AuctionRound.FINAL
-
+  
   // make it an eject auction if there is 1 bps or more of value to eject
   if (portionBeingEjected.gte(1e-4)) {
     round = AuctionRound.EJECT
-
+    
     rebalanceTarget = progression.add(portionBeingEjected.mul(1.2)) // set rebalanceTarget to 20% more than needed to ensure ejection completes
     if (rebalanceTarget.gt(ONE)) {
       rebalanceTarget = ONE
@@ -273,11 +281,20 @@ export const getOpenAuction = (
   } else if (relativeProgression.lt(finalStageAt.sub(0.02))) {
     // wiggle room to prevent having to re-run an auction at the same stage after price movement
     round = AuctionRound.PROGRESS
-
+    
     rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt))
     if (rebalanceTarget.gte(ONE)) {
       throw new Error('something has gone very wrong')
     }
+  }
+  
+  if (logging) {
+    console.log('rebalanceTarget', rebalanceTarget.toString())
+    console.log('initialProgression', initialProgression.toString())
+    console.log('progression', progression.toString())
+    console.log('relativeProgression', relativeProgression.toString())
+    console.log('portionBeingEjected', portionBeingEjected.toString())
+    console.log('finalStageAt', finalStageAt.toString())
   }
 
   // {1}
@@ -320,6 +337,10 @@ export const getOpenAuction = (
   }
   if (newLimits.high > rebalance.limits.high) {
     newLimits.high = rebalance.limits.high
+  }
+
+  if (logging) {
+    console.log('newLimits', newLimits)
   }
 
   // ================================================================
@@ -381,6 +402,10 @@ export const getOpenAuction = (
     return newWeightsD27
   })
 
+  if (logging) {
+    console.log('newWeights', newWeights)
+  }
+
   // ================================================================
 
   // get new prices, constrained by extremes
@@ -431,6 +456,10 @@ export const getOpenAuction = (
 
     return pricesD27
   })
+
+  if (logging) {
+    console.log('newPrices', newPrices)
+  }
 
   // ================================================================
 
