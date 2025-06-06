@@ -237,13 +237,13 @@ describe("NATIVE DTFs", () => {
         newWeights: [
           initialWeightsS1[0],
           {
-            low: initialWeightsS1[1].high,
-            spot: initialWeightsS1[1].high,
+            low: initialWeightsS1[1].spot,
+            spot: initialWeightsS1[1].spot + initialWeightsS1[1].spot * 1n / 100n,
             high: initialWeightsS1[1].high,
           },
           {
-            low: initialWeightsS1[2].high,
-            spot: initialWeightsS1[2].high,
+            low: initialWeightsS1[2].spot,
+            spot: initialWeightsS1[2].spot + initialWeightsS1[2].spot * 1n / 100n,
             high: initialWeightsS1[2].high,
           },
         ],
@@ -554,8 +554,8 @@ describe("NATIVE DTFs", () => {
         tokens: tokens,
         newWeights: [
           {
-            low: initialWeightsS2[0].high,
-            spot: initialWeightsS2[0].high,
+            low: initialWeightsS2[0].spot,
+            spot: initialWeightsS2[0].spot + initialWeightsS2[0].spot * 1n / 100n,
             high: initialWeightsS2[0].high,
           },
           initialWeightsS2[1],

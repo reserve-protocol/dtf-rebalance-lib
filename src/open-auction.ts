@@ -330,10 +330,11 @@ export const getOpenAuction = (
   }
 
   if (round == AuctionRound.EJECT && rebalanceTarget.eq(ONE)) {
-    // if ejecting to completion, aim 10% higher (if possible)
-    newLimits.low = bn(spotLimit.mul(1.1).mul(D18d))
-    newLimits.spot = bn(spotLimit.mul(1.1).mul(D18d))
-    newLimits.high = bn(spotLimit.mul(1.1).mul(D18d))
+    // aim 1% higher if executed permissonlessly
+    newLimits.spot += newLimits.spot * 1n / 100n
+    
+    // leave 10% room to increase low in the future if ejection leaves dust behind
+    newLimits.high += newLimits.high * 10n / 100n
   }
 
   // low
@@ -403,10 +404,11 @@ export const getOpenAuction = (
     }
 
     if (round == AuctionRound.EJECT && rebalanceTarget.eq(ONE)) {
-      // if ejecting to completion, aim 10% higher
-      newWeightsD27.low = newWeightsD27.low * 11n / 10n
-      newWeightsD27.spot = newWeightsD27.spot * 11n / 10n
-      newWeightsD27.high = newWeightsD27.high * 11n / 10n
+      // aim 1% higher if executed permissonlessly
+      newWeightsD27.spot += newWeightsD27.spot * 1n / 100n
+      
+      // leave 10% room to increase low in the future if ejection leaves dust behind
+      newWeightsD27.high += newWeightsD27.high * 10n / 100n
     }
 
     if (newWeightsD27.low < weightRange.low) {
