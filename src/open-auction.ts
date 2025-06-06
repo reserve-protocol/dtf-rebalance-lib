@@ -282,24 +282,30 @@ export const getOpenAuction = (
   if (portionBeingEjected.gte(1e-4)) {
     round = AuctionRound.EJECT
 
-    rebalanceTarget = progression.add(portionBeingEjected.mul(1.2)) // set rebalanceTarget to 20% more than needed to ensure ejection completes
-    if (rebalanceTarget.gte(ONE)) {
-      rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt))
-    } 
+    if (relativeProgression.lt(finalStageAt.sub(0.02))) {
+      rebalanceTarget = progression.add(portionBeingEjected.mul(1.1)) // set rebalanceTarget to 10% more than needed to ensure ejection completes
+      
+      // do not finish trading yet
+      if (rebalanceTarget.gte(ONE)) {
+        rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt))
+      } 
+    }
   } else if (relativeProgression.lt(finalStageAt.sub(0.02))) {
       // wiggle room to prevent having to re-run an auction at the same stage after price movement
       round = AuctionRound.PROGRESS
       
       rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt))
-      if (rebalanceTarget.gt(ONE)) {
-        throw new Error('something has gone very wrong')
+      if (rebalanceTarget.eq(ONE)) {
+        round = AuctionRound.FINAL
       }
+  }
+
+  if (rebalanceTarget.gt(ONE)) {
+    throw new Error('something has gone very wrong')
   }
   
   if (rebalanceTarget.lt(progression)) {
       rebalanceTarget = ONE
-  } else if (rebalanceTarget.eq(ONE)) {
-    round = AuctionRound.FINAL
   }
 
   if (logging) {
@@ -316,12 +322,18 @@ export const getOpenAuction = (
   // {wholeBU/wholeShare} = {USD/wholeShare} / {USD/wholeBU}
   const spotLimit = shareValue.div(buValue)
 
-
   // D18{BU/share} = {wholeBU/wholeShare} * D18 * {1}
   const newLimits = {
     low: bn(spotLimit.sub(spotLimit.mul(delta)).mul(D18d)),
     spot: bn(spotLimit.mul(D18d)),
     high: bn(spotLimit.add(spotLimit.mul(delta)).mul(D18d)),
+  }
+
+  if (round == AuctionRound.EJECT && rebalanceTarget.eq(ONE)) {
+    // if ejecting to completion, aim 10% higher (if possible)
+    newLimits.low = bn(spotLimit.mul(1.1).mul(D18d))
+    newLimits.spot = bn(spotLimit.mul(1.1).mul(D18d))
+    newLimits.high = bn(spotLimit.mul(1.1).mul(D18d))
   }
 
   // low
@@ -388,6 +400,13 @@ export const getOpenAuction = (
           .mul(decimalScale[i])
           .div(D18d)
       ),
+    }
+
+    if (round == AuctionRound.EJECT && rebalanceTarget.eq(ONE)) {
+      // if ejecting to completion, aim 10% higher
+      newWeightsD27.low = newWeightsD27.low * 11n / 10n
+      newWeightsD27.spot = newWeightsD27.spot * 11n / 10n
+      newWeightsD27.high = newWeightsD27.high * 11n / 10n
     }
 
     if (newWeightsD27.low < weightRange.low) {

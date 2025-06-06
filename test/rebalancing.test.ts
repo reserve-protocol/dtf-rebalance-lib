@@ -237,14 +237,14 @@ describe("NATIVE DTFs", () => {
         newWeights: [
           initialWeightsS1[0],
           {
-            low: initialWeightsS1[1].spot, // Reverted: Was 4.75e26, now spot due to delta=0
-            spot: initialWeightsS1[1].spot,
-            high: initialWeightsS1[1].spot,
+            low: initialWeightsS1[1].high,
+            spot: initialWeightsS1[1].high,
+            high: initialWeightsS1[1].high,
           },
           {
-            low: initialWeightsS1[2].spot, // Reverted: Was 4.75e14, now spot due to delta=0
-            spot: initialWeightsS1[2].spot,
-            high: initialWeightsS1[2].spot,
+            low: initialWeightsS1[2].high,
+            spot: initialWeightsS1[2].high,
+            high: initialWeightsS1[2].high,
           },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
@@ -554,9 +554,9 @@ describe("NATIVE DTFs", () => {
         tokens: tokens,
         newWeights: [
           {
-            low: initialWeightsS2[0].spot, // Reverted: Was 9.5e14, now spot due to delta=0
-            spot: initialWeightsS2[0].spot,
-            high: initialWeightsS2[0].spot,
+            low: initialWeightsS2[0].high,
+            spot: initialWeightsS2[0].high,
+            high: initialWeightsS2[0].high,
           },
           initialWeightsS2[1],
           initialWeightsS2[2],
