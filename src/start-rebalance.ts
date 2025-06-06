@@ -21,6 +21,7 @@ export interface StartRebalanceArgsPartial {
  *
  * @param _supply {share}
  * @param tokens Addresses of tokens in the basket
+ * @param _folio D18{tok/share} Folio of the basket
  * @param decimals Decimals of each token
  * @param _targetBasket D18{1} Ideal basket
  * @param _prices {USD/wholeTok} USD prices for each *whole* token
@@ -31,17 +32,22 @@ export interface StartRebalanceArgsPartial {
 export const getStartRebalance = (
   _supply: bigint,
   tokens: string[],
+  _folio: bigint[],
   decimals: bigint[],
   _targetBasket: bigint[],
   _prices: number[],
   _priceError: number[],
-  _dtfPrice: number,
   weightControl: boolean,
   logging?: boolean
 ): StartRebalanceArgsPartial => {
   if (logging) {
-    console.log('getStartRebalance', _supply, tokens, decimals, _targetBasket, _prices, _priceError, _dtfPrice, weightControl)
+    console.log('getStartRebalance', _supply, tokens, _folio, decimals, _targetBasket, _prices, _priceError,  weightControl)
   }
+
+  // {wholeTok/wholeShare} = D18{tok/share} * {share/wholeShare} / {tok/wholeTok} / D18
+  const folio = _folio.map((c: bigint, i: number) =>
+    new Decimal(c.toString()).div(new Decimal(`1e${decimals[i]}`))
+  )
 
   // convert price number inputs to bigints
 
@@ -52,9 +58,6 @@ export const getStartRebalance = (
       throw new Error(`missing price for token ${tokens[i]}`)
     }
   }
-
-  // {USD/wholeShare}
-  const dtfPrice = new Decimal(_dtfPrice)
 
   // {1} = D18{1} / D18
   const targetBasket = _targetBasket.map((a) =>
@@ -83,6 +86,8 @@ export const getStartRebalance = (
 
     // === newWeights ===
 
+    // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
+    const dtfPrice = folio.map((f: Decimal, i: number) => f.mul(prices[i])).reduce((a: Decimal, b: Decimal) => a.add(b))
 
     // {wholeTok/wholeShare} = {1} * {USD/wholeShare} / {USD/wholeTok}
     const spotWeight = targetBasket[i].mul(dtfPrice).div(prices[i])

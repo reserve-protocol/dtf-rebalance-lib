@@ -109,11 +109,11 @@ describe("NATIVE DTFs", () => {
       const { weights, prices, limits } = getStartRebalance(
         supply,
         tokens,
+        initialFolioS1,
         decimalsS1,
         targetBasketS1,
         initialMarketPricesS1,
         priceErrorStartRebalanceS1,
-        dtfPriceS1,
         true // weightControl: true for NATIVE-style
       )
       initialWeightsS1 = weights
@@ -427,11 +427,11 @@ describe("NATIVE DTFs", () => {
       const { weights, prices, limits } = getStartRebalance(
         supply,
         tokens,
+        initialFolioS2,
         decimalsS2,
         targetBasketS2,
         initialMarketPricesS2,
         priceErrorStartRebalanceS2,
-        dtfPriceS2,
         true
       )
       initialWeightsS2 = weights
@@ -688,6 +688,7 @@ describe("NATIVE DTFs", () => {
     const prices = [1, 3000]
     const priceError = [0.1, 0.1]
     const targetBasket = [bn("0.75e18"), bn("0.25e18")]
+    const initialFolio = [bn("1e6"), bn("0")] // Represents 1 USDC, 0 ETH
     const {
       weights: newWeights,
       prices: newPricesResult, // renamed to avoid clash
@@ -695,11 +696,11 @@ describe("NATIVE DTFs", () => {
     } = getStartRebalance(
       supply,
       tokens,
+      initialFolio,
       decimals,
       targetBasket,
       prices,
       priceError,
-      1, // dtfPrice
       true // weightControl: true
     )
     assert.equal(newWeights.length, 2)
@@ -752,6 +753,8 @@ describe("NATIVE DTFs", () => {
       }
       const currentDecimals = currentTokens.map((t) => decimalsMap[t])
 
+      const folio = currentTokens.map((_, i) => (i === 0 ? bn(`1e${currentDecimals[0]}`) : 0n))
+
       const bals = currentTokens.map(
         (_) => bn(Math.round(Math.random() * 1e20).toString()) // Reduced scale
       )
@@ -769,11 +772,11 @@ describe("NATIVE DTFs", () => {
       } = getStartRebalance(
         supply,
         currentTokens,
+        folio,
         currentDecimals,
         targetBasket,
         prices,
         priceError,
-        prices[0] || 1, // dtfPrice, use first token's price or 1
         true // weightControl: true
       )
       assert.equal(newWeights.length, currentTokens.length)
@@ -804,11 +807,11 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
   } = getStartRebalance(
     supply,
     tokens,
+    _folioUSDCStart,
     decimals,
     targetBasketUSDCtoDAIUST,
     initialMarketPrices,
     priceErrorStartRebalance,
-    dtfPrice,
     false // weightControl: false for TRACKING-style weights and limits
   )
 
