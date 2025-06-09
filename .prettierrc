@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/prettierrc",
+  "singleQuote": false,
+  "semi": true,
+  "arrowParens": "always",
+  "printWidth": 120,
+  "bracketSpacing": true,
+  "singleAttributePerLine": true,
+  "endOfLine": "lf",
+  "trailingComma": "all",
+  "overrides": [
+    {
+      "files": "*.ts",
+      "options": {
+        "parser": "typescript"
+      }
+    }
+  ]
+}

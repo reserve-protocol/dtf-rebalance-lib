@@ -1,2 +1,8 @@
 node_modules
-*.tgz 
+*.tgz
+test/
+dist/test
+*.test.*
+hardhat.config.ts
+.env
+.env.example

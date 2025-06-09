@@ -1,3 +1,12 @@
+.env
+*.log
+
+cache
+out
+artifacts
+
 dist
 node_modules
 *.tgz
+
+.claude

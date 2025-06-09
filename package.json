@@ -1,6 +1,6 @@
 {
   "name": "@reserve-protocol/dtf-rebalance-lib",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Rebalancing library for DTFs in typescript",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -13,9 +13,12 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
+    "compile": "hardhat compile",
     "build": "npm run clean && tsc",
     "prepublishOnly": "npm run build",
-    "test": "tsc --project tsconfig.test.json && node --test dist/test/*.test.js"
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "node --test --require ts-node/register test/unit/*.test.ts",
+    "test:e2e": "hardhat test --bail"
   },
   "publishConfig": {
     "access": "public"
@@ -39,6 +42,14 @@
     "decimal.js-light": "^2.5.1"
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.3.0",
+    "@reserve-protocol/reserve-index-dtf": "github:reserve-protocol/reserve-index-dtf#a240822d7a02520def5564668ac7699b0520bdae",
+    "@types/node": "^20.0.0",
+    "dotenv": "^16.5.0",
+    "hardhat": "^2.24.1",
+    "prettier": "^3.5.3",
+    "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   }
 }
