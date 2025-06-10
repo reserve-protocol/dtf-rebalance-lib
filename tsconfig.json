@@ -6,7 +6,8 @@
       "declaration": true, // Generate .d.ts files
       "strict": true,
       "esModuleInterop": true,
-      "skipLibCheck": true
+      "skipLibCheck": true,
+      "resolveJsonModule": true
     },
     "include": ["src/**/*", "test/**/*"],
     "exclude": ["node_modules", "dist"]

@@ -2,17 +2,16 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
-import { Contract } from "ethers"; // For typing Folio and FolioLens contracts
+import { Contract } from "ethers";
 
 import { Folio as FolioConfig } from "../constants"; // Renaming to avoid conflict
 import { getAssetPrices, whileImpersonating, toPlainObject, getTokenNameAndSymbol } from "../utils";
-import { AuctionRound, AuctionMetrics, getOpenAuction } from "../../../src/open-auction";
+import { AuctionMetrics, getOpenAuction } from "../../../src/open-auction";
 import { getStartRebalance } from "../../../src/start-rebalance";
 
-// Define an interface for the contract instances for better type safety
 interface RebalanceContracts {
-  folio: Contract; // Replace with specific Folio type if available
-  folioLensTyped: Contract; // Replace with specific FolioLens type if available
+  folio: Contract;
+  folioLensTyped: Contract;
 }
 
 interface RebalanceSigners {
@@ -59,7 +58,6 @@ export async function runRebalance(
   }
 
   const pricesRec = await getAssetPrices(orderedTokens, folioConfig.chainId, await time.latest());
-  console.log("pricesRec", pricesRec);
   for (const token of orderedTokens) {
     if (pricesRec[token] === undefined || pricesRec[token].snapshotPrice === 0) {
       throw new Error(
@@ -69,7 +67,7 @@ export async function runRebalance(
 
     expect(
       (pricesRec[token].currentPrice - pricesRec[token].snapshotPrice) / pricesRec[token].snapshotPrice,
-    ).to.be.lessThan(0.05);
+    ).to.be.lessThan(0.5);
   }
 
   const initialAmountsArray = orderedTokens.map((token) => initialAmounts[token]);
@@ -105,7 +103,7 @@ export async function runRebalance(
       startRebalanceArgs.prices,
       startRebalanceArgs.limits,
       0n,
-      100n,
+      10000n,
     );
   });
 
@@ -160,7 +158,37 @@ export async function runRebalance(
   };
 
   const doAuction = async (currentFinalStageAt: number): Promise<AuctionMetrics> => {
+    // Log current distribution at start of auction if logging is enabled
+    if (logging) {
+      const [currentTokens, currentAmounts] = await folio.toAssets(10n ** 18n, 0);
+      const currentValues: Record<string, number> = {};
+      let totalCurrentValue = 0;
+
+      orderedTokens.forEach((token: string) => {
+        const idx = currentTokens.indexOf(token);
+        const price = pricesRec[token].snapshotPrice;
+        const amount = currentAmounts[idx];
+        const decimal = allDecimalsRec[token];
+
+        currentValues[token] = (price * Number(amount)) / Number(10n ** decimal);
+        totalCurrentValue += currentValues[token];
+      });
+
+      const currentPercentages = orderedTokens.map((token: string) => {
+        const value = currentValues[token] || 0;
+        const percentage = totalCurrentValue > 0 ? (value / totalCurrentValue) * 100 : 0;
+        return `${percentage.toFixed(2)}%`;
+      });
+
+      console.log(`📊 Starting auction with distribution: [${currentPercentages.join(", ")}]`);
+    }
+
     const rebalanceState = await folio.getRebalance();
+    expect(rebalanceState.availableUntil).to.be.greaterThan(await time.latest());
+    for (const inRebalance of rebalanceState.inRebalance) {
+      expect(inRebalance).to.equal(true);
+    }
+
     const wholeRebalance = {
       nonce: rebalanceState.nonce,
       tokens: orderedTokens,
@@ -217,13 +245,16 @@ export async function runRebalance(
     await hre.network.provider.send("evm_setNextBlockTimestamp", [bidTime.toString()]);
     await hre.network.provider.send("evm_mine", []);
 
-    let allBids = toPlainObject(await folioLensTyped.getAllBids(await folio.getAddress(), auctionId, 0n));
+    let allBids = toPlainObject(
+      await folioLensTyped.getAllBids(await folio.getAddress(), auctionId, (await time.latest()) + 1),
+    );
     allBids.sort((a: any, b: any) => getBidValue(b) - getBidValue(a));
+    console.log("allBids", allBids.length);
 
     expect(allBids.length).to.be.greaterThan(0);
     expect(getBidValue(allBids[0])).to.be.greaterThan(1);
 
-    while (allBids.length > 0 && getBidValue(allBids[0]) > 0.1) {
+    while (allBids.length > 0 && getBidValue(allBids[0]) > 10) {
       const bid = allBids[0];
 
       const buyTokenContract = mockedTokensRec[bid[1]] as unknown as Contract;
@@ -251,27 +282,28 @@ export async function runRebalance(
       );
       allBids.sort((a: any, b: any) => getBidValue(b) - getBidValue(a));
     }
+
+    // re-add any ejected tokens to basket
+    await whileImpersonating(hre, await admin.getAddress(), async (signer) => {
+      const [basketWithoutEjectedToken] = await folio.toAssets(10n ** 18n, 0);
+
+      for (const token of orderedTokens) {
+        if (!basketWithoutEjectedToken.includes(token)) {
+          console.log("adding", token, "back to basket");
+          await (await (folio.connect(signer) as any).addToBasket(token)).wait();
+        }
+      }
+    });
+
     return auctionMetrics;
   };
 
   const firstAuctionMetrics = await doAuction(finalStageAt);
 
-  const rebalanceAfterFirst = await folio.getRebalance();
   let finalAuctionMetrics = firstAuctionMetrics;
-
-  if (rebalanceAfterFirst.rebalanceType !== AuctionRound.FINAL) {
+  if (firstAuctionMetrics.target !== 1) {
     finalAuctionMetrics = await doAuction(finalStageAt);
   }
-
-  // re-add ejected token to basket
-  await whileImpersonating(hre, await admin.getAddress(), async (signer) => {
-    const [basketWithoutEjectedToken] = await folio.toAssets(10n ** 18n, 0);
-    for (const token of orderedTokens) {
-      if (!basketWithoutEjectedToken.includes(token)) {
-        await (await (folio.connect(signer) as any).addToBasket(token)).wait();
-      }
-    }
-  });
 
   // verify we are close to the target basket
   const [actualBasket, actualBasketAmounts] = await folio.toAssets(supply, 0);

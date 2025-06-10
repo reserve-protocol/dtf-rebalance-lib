@@ -6,7 +6,6 @@ import { initializeChainState, deployCommonContracts } from "./lib/setup";
 import { runRebalance } from "./lib/rebalance-helpers";
 import { Contract } from "ethers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import { AuctionRound } from "../../src/open-auction";
 
 for (const folioConfig of FOLIO_CONFIGS) {
   describe("Fuzzing " + folioConfig.name, function () {
@@ -48,7 +47,7 @@ for (const folioConfig of FOLIO_CONFIGS) {
     const NUM_FUZZ_RUNS = 100;
     for (let i = 0; i < NUM_FUZZ_RUNS; i++) {
       it(`Basket randomization round ${i} for ${folioConfig.name} -- EJECT->FINAL`, async function () {
-        this.timeout(60000);
+        this.timeout(30000);
 
         // --- Common setup for the round ---
         const [initialTokens, initialAmounts] = await folio.toAssets(10n ** 18n, 0);
@@ -90,7 +89,7 @@ for (const folioConfig of FOLIO_CONFIGS) {
           initialBasket[token] = bn(((initialValuesRec[token] / totalInitialValue) * 10 ** 18).toString());
         });
 
-        // --- First Rebalance: EJECT, up to 0.95 cap ---
+        // --- Generate target basket with one token ejected ---
 
         const randomShares = initialTokens.map((_: string) => BigInt(Math.floor(Math.random() * 999) + 1));
         const indexToEject = Math.floor(Math.random() * initialTokens.length);
@@ -103,8 +102,9 @@ for (const folioConfig of FOLIO_CONFIGS) {
         });
 
         await logPercentages(`🎯 Target basket`, targetBasketRec, initialTokens);
-
         await logPercentages(`▶️  Initial state`, initialBasket, initialTokens);
+
+        // --- Single rebalance call that handles both EJECT and FINAL auctions ---
 
         await runRebalance(
           hre,
@@ -118,55 +118,7 @@ for (const folioConfig of FOLIO_CONFIGS) {
           true,
         );
 
-        // --- Second Rebalance: FINAL ---
-
-        const rebalance = await folio.getRebalance();
-        if (rebalance.rebalanceType === AuctionRound.FINAL) {
-          console.log("✅ went all the way to FINAL");
-          return;
-        }
-
-        const [tokensAfterEject, amountsAfterEject] = await folio.toAssets(10n ** 18n, 0);
-
-        const amountsAfterEjectRec: Record<string, bigint> = {};
-        tokensAfterEject.forEach((token: string, idx: number) => {
-          amountsAfterEjectRec[token] = amountsAfterEject[idx];
-        });
-
-        let totalIntermediateValue = 0;
-        const intermediateTokenValuesRec: Record<string, number> = {};
-        tokensAfterEject.forEach((token: string) => {
-          const price = pricesRec[token].snapshotPrice;
-          const amount = amountsAfterEjectRec[token] || 0n;
-          const decimal = decimalsRec[token];
-
-          intermediateTokenValuesRec[token] = (price * Number(amount)) / Number(10n ** decimal);
-          totalIntermediateValue += intermediateTokenValuesRec[token];
-        });
-
-        const intermediateTargetWeightsRec: Record<string, bigint> = {};
-        initialTokens.forEach((token: string) => {
-          const tokenValue = intermediateTokenValuesRec[token] || 0;
-          intermediateTargetWeightsRec[token] = bn(((tokenValue / totalIntermediateValue) * 10 ** 18).toString());
-        });
-        await logPercentages(`📊 Intermediate state`, intermediateTargetWeightsRec, initialTokens);
-
-        const targetBasketForFinalRec: Record<string, bigint> = {};
-        tokensAfterEject.forEach((token: string) => {
-          targetBasketForFinalRec[token] = targetBasketRec[token];
-        });
-
-        await runRebalance(
-          hre,
-          folioConfig,
-          { folio, folioLensTyped },
-          { bidder, rebalanceManager, auctionLauncher, admin },
-          [...tokensAfterEject],
-          amountsAfterEjectRec,
-          targetBasketForFinalRec,
-          0.95,
-          true,
-        );
+        // --- Verify final state ---
 
         const [finalTokens, amountsAfterFinal] = await folio.toAssets(10n ** 18n, 0);
 
@@ -186,13 +138,11 @@ for (const folioConfig of FOLIO_CONFIGS) {
           totalAfterFinalValue += finalTokenValuesRec[token];
         });
 
-        const finalTargetWeightsRec: Record<string, bigint> = {};
+        const finalTargetBasketRec: Record<string, bigint> = {};
         finalTokens.forEach((token: string) => {
-          finalTargetWeightsRec[token] = bn(
-            ((finalTokenValuesRec[token] / totalAfterFinalValue) * 10 ** 18).toString(),
-          );
+          finalTargetBasketRec[token] = bn(((finalTokenValuesRec[token] / totalAfterFinalValue) * 10 ** 18).toString());
         });
-        await logPercentages(`✅ Final`, finalTargetWeightsRec, initialTokens);
+        await logPercentages(`✅ Final`, finalTargetBasketRec, initialTokens);
         await logPercentages(`🎯 Target basket`, targetBasketRec, initialTokens);
       });
     }
