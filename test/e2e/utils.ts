@@ -24,8 +24,10 @@ type TokenPriceWithSnapshot = Record<string, { currentPrice: number; snapshotPri
 export const getAssetPrices = async (
   tokens: string[],
   chainId: number,
-  timestamp?: number,
+  timestamp: number,
 ): Promise<TokenPriceWithSnapshot> => {
+  await new Promise((resolve) => setTimeout(resolve, 200)); // base rate limiting
+
   if (!tokens?.length) return {};
 
   const RESERVE_API = "https://api.reserve.org/"; // Assuming this is the base API URL
@@ -44,23 +46,57 @@ export const getAssetPrices = async (
     return acc;
   }, {} as TokenPriceWithSnapshot);
 
-  // Fetch snapshot prices if timestamp is provided
-  if (timestamp && tokens.length > 0) {
-    // Ensure tokens array is not empty for historical fetch
-    const from = Number(timestamp) - 1 * 60 * 60;
-    const to = Number(timestamp) + 1 * 60 * 60;
-    const baseUrl = `${RESERVE_API}historical/prices?chainId=${chainId}&from=${from}&to=${to}&interval=1h&address=`;
+  // Ensure tokens array is not empty for historical fetch
+  const from = Number(timestamp) - 120;
+  const to = Number(timestamp) + 120;
+  const baseUrl = `${RESERVE_API}historical/prices?chainId=${chainId}&from=${from}&to=${to}&interval=5m&address=`;
 
-    // Create a map of original token casing to handle potential discrepancies from historical API if any
-    // However, historical API also returns "address" field which should be used.
-    // The tokens in the `tokens` array are used to make the calls.
-    const calls = tokens.map(
-      (tokenAddress) => fetch(`${baseUrl}${tokenAddress}`).then((res) => res.json()), // Use original tokenAddress for API call
+  // Create a map of original token casing to handle potential discrepancies from historical API if any
+  // However, historical API also returns "address" field which should be used.
+  // The tokens in the `tokens` array are used to make the calls.
+  const calls = tokens.map(
+    (tokenAddress) => fetch(`${baseUrl}${tokenAddress}`).then((res) => res.json()), // Use original tokenAddress for API call
+  );
+
+  const historicalResponses = await (<Promise<HistoricalPriceResponse[]>>Promise.all(calls));
+
+  let foundAll = true;
+  for (const historicalData of historicalResponses) {
+    // Use address from historical data response directly as key
+    const addressFromApi = historicalData.address;
+    const price =
+      historicalData.timeseries.length === 0
+        ? 0
+        : historicalData.timeseries[Math.floor(historicalData.timeseries.length / 2)].price;
+
+    if (result[addressFromApi]) {
+      result[addressFromApi].snapshotPrice = price;
+    } else {
+      // This case can happen if a token was in historical but not current, or casing mismatch
+      // If current price wasn't fetched, we initialize it here.
+      result[addressFromApi] = {
+        currentPrice: 0, // Or some other default/error state
+        snapshotPrice: price,
+      };
+    }
+
+    if (result[addressFromApi]?.snapshotPrice === 0) {
+      foundAll = false;
+    }
+  }
+
+  // failure case
+  if (!foundAll) {
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // sleep 2s to let the api cooldown
+
+    // add dummy var to end to force cache clear
+    const calls = tokens.map((tokenAddress) =>
+      fetch(`${baseUrl}${tokenAddress}&t=${Date.now()}`).then((res) => res.json()),
     );
 
     const historicalResponses = await (<Promise<HistoricalPriceResponse[]>>Promise.all(calls));
 
-    let foundAll = true;
+    foundAll = true;
     for (const historicalData of historicalResponses) {
       // Use address from historical data response directly as key
       const addressFromApi = historicalData.address;
@@ -84,38 +120,17 @@ export const getAssetPrices = async (
         foundAll = false;
       }
     }
+  }
 
-    // failure case
-    if (!foundAll) {
-      console.log("sleeping 5s after pricing API failure");
-      await new Promise((resolve) => setTimeout(resolve, 5000)); // wait for 5s
+  if (!foundAll) {
+    throw new Error("Failed to fetch all prices");
+  }
 
-      // add dummy var to end to force cache clear
-      const calls = tokens.map((tokenAddress) =>
-        fetch(`${baseUrl}${tokenAddress}&t=${Date.now()}`).then((res) => res.json()),
-      );
-
-      const historicalResponses = await (<Promise<HistoricalPriceResponse[]>>Promise.all(calls));
-
-      for (const historicalData of historicalResponses) {
-        // Use address from historical data response directly as key
-        const addressFromApi = historicalData.address;
-        const price =
-          historicalData.timeseries.length === 0
-            ? 0
-            : historicalData.timeseries[Math.floor(historicalData.timeseries.length / 2)].price;
-
-        if (result[addressFromApi]) {
-          result[addressFromApi].snapshotPrice = price;
-        } else {
-          // This case can happen if a token was in historical but not current, or casing mismatch
-          // If current price wasn't fetched, we initialize it here.
-          result[addressFromApi] = {
-            currentPrice: 0, // Or some other default/error state
-            snapshotPrice: price,
-          };
-        }
-      }
+  for (const token of tokens) {
+    const priceRatio = (result[token].currentPrice - result[token].snapshotPrice) / result[token].snapshotPrice;
+    if (priceRatio > 0.5) {
+      console.log(historicalResponses);
+      throw new Error(`price ratio for token ${token} is too high: ${priceRatio}`);
     }
   }
 

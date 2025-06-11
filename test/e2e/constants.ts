@@ -9,12 +9,12 @@ export interface Folio {
 }
 
 export const FOLIO_CONFIGS: Folio[] = [
-  {
-    name: "BED",
-    chainId: 1,
-    address: "0x4E3B170DcBe704b248df5f56D488114acE01B1C5",
-    proxyAdmin: "0xEAa356F6CD6b3fd15B47838d03cF34fa79F7c712",
-  },
+  // {
+  //   name: "BED",
+  //   chainId: 1,
+  //   address: "0x4E3B170DcBe704b248df5f56D488114acE01B1C5",
+  //   proxyAdmin: "0xEAa356F6CD6b3fd15B47838d03cF34fa79F7c712",
+  // },
   // DGI seems to always have some token with broken price
   // {
   //   name: "DGI",
@@ -22,12 +22,12 @@ export const FOLIO_CONFIGS: Folio[] = [
   //   address: "0x9a1741E151233a82Cf69209A2F1bC7442B1fB29C",
   //   proxyAdmin: "0xe24e3DBBEd0db2a9aC2C1d2EA54c6132Dce181b7",
   // },
-  // {
-  //   name: "DFX",
-  //   chainId: 1,
-  //   address: "0x188D12Eb13a5Eadd0867074ce8354B1AD6f4790b",
-  //   proxyAdmin: "0x0e3B2EF9701d5Ef230CB67Ee8851bA3071cf557C",
-  // },
+  {
+    name: "DFX",
+    chainId: 1,
+    address: "0x188D12Eb13a5Eadd0867074ce8354B1AD6f4790b",
+    proxyAdmin: "0x0e3B2EF9701d5Ef230CB67Ee8851bA3071cf557C",
+  },
   // {
   //   name: "mvDEFI",
   //   chainId: 1,

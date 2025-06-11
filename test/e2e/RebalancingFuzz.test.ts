@@ -39,31 +39,35 @@ for (const folioConfig of FOLIO_CONFIGS) {
       const percentageStrings = orderedTokensForLog.map((token) => {
         const weight = targetBasketWeights[token] || 0n; // Handle cases where a token might not be in the weights
         const percentage = (Number(weight) / Number(10n ** 18n)) * 100;
-        return `${percentage.toFixed(2)}%`;
+        return percentage === 0 ? "00.00%" : `${percentage.toFixed(2)}%`;
       });
       console.log(`${label} [${percentageStrings.join(", ")}]`);
     };
 
+    // Initialize tokens once outside the loop to keep them constant
+    let orderedTokens: string[];
+    let decimalsRec: Record<string, bigint> = {};
+
+    before(async function () {
+      // Get initial tokens and their decimals once
+      const [tokens] = await folio.toAssets(10n ** 18n, 0);
+      orderedTokens = [...tokens];
+
+      for (const token of orderedTokens) {
+        decimalsRec[token] = await (await hre.ethers.getContractAt("IERC20Metadata", token)).decimals();
+      }
+    });
+
     const NUM_FUZZ_RUNS = 100;
     for (let i = 0; i < NUM_FUZZ_RUNS; i++) {
       it(`Basket randomization round ${i} for ${folioConfig.name} -- EJECT->FINAL`, async function () {
-        this.timeout(30000);
+        this.timeout(60000);
 
         // --- Common setup for the round ---
-        const [initialTokens, initialAmounts] = await folio.toAssets(10n ** 18n, 0);
 
-        if (initialTokens.length === 0) {
-          throw new Error(`Basket for ${folioConfig.name} is empty`);
-        }
+        const pricesRec = await getAssetPrices(orderedTokens, folioConfig.chainId, await time.latest());
 
-        const decimalsRec: Record<string, bigint> = {};
-        for (const token of initialTokens) {
-          decimalsRec[token] = await (await hre.ethers.getContractAt("IERC20Metadata", token)).decimals();
-        }
-
-        const pricesRec = await getAssetPrices(initialTokens, folioConfig.chainId, await time.latest());
-
-        for (const token of initialTokens) {
+        for (const token of orderedTokens) {
           if (!pricesRec[token] || pricesRec[token].snapshotPrice === 0) {
             throw new Error(
               `missing price for token ${token} (${await getTokenNameAndSymbol(token).then((t) => t.symbol)}) for ${folioConfig.name}`,
@@ -71,38 +75,39 @@ for (const folioConfig of FOLIO_CONFIGS) {
           }
         }
 
+        const [initialTokens, initialAmounts] = await folio.toAssets(10n ** 18n, 0);
+
         const initialAmountsRec: Record<string, bigint> = {};
-        initialTokens.forEach((token: string, idx: number) => {
-          initialAmountsRec[token] = initialAmounts[idx];
+        orderedTokens.forEach((token: string) => {
+          initialAmountsRec[token] = initialAmounts[initialTokens.indexOf(token)];
         });
 
         const initialValuesRec: Record<string, number> = {};
         let totalInitialValue = 0;
-        initialTokens.forEach((token: string) => {
+        orderedTokens.forEach((token: string) => {
           initialValuesRec[token] =
             (pricesRec[token].snapshotPrice * Number(initialAmountsRec[token])) / Number(10n ** decimalsRec[token]);
           totalInitialValue += initialValuesRec[token];
         });
 
         const initialBasket: Record<string, bigint> = {};
-        initialTokens.forEach((token: string) => {
+        orderedTokens.forEach((token: string) => {
           initialBasket[token] = bn(((initialValuesRec[token] / totalInitialValue) * 10 ** 18).toString());
         });
 
-        // --- Generate target basket with one token ejected ---
+        // --- Generate target with one token ejected ---
 
-        const randomShares = initialTokens.map((_: string) => BigInt(Math.floor(Math.random() * 999) + 1));
-        const indexToEject = Math.floor(Math.random() * initialTokens.length);
+        const randomShares = orderedTokens.map((_: string) => BigInt(Math.floor(Math.random() * 999) + 1));
+        const indexToEject = Math.floor(Math.random() * orderedTokens.length);
         randomShares[indexToEject] = 0n; // eject random token
         const sumRandomShares = randomShares.reduce((a: bigint, b: bigint) => a + b, 0n);
 
         const targetBasketRec: Record<string, bigint> = {};
-        initialTokens.forEach((token: string, k: number) => {
+        orderedTokens.forEach((token: string, k: number) => {
           targetBasketRec[token] = (randomShares[k] * 10n ** 18n) / sumRandomShares;
         });
 
-        await logPercentages(`🎯 Target basket`, targetBasketRec, initialTokens);
-        await logPercentages(`▶️  Initial state`, initialBasket, initialTokens);
+        await logPercentages(`\nNew Target  `, targetBasketRec, orderedTokens);
 
         // --- Single rebalance call that handles both EJECT and FINAL auctions ---
 
@@ -111,11 +116,11 @@ for (const folioConfig of FOLIO_CONFIGS) {
           folioConfig,
           { folio, folioLensTyped },
           { bidder, rebalanceManager, auctionLauncher, admin },
-          [...initialTokens],
+          [...orderedTokens],
           initialAmountsRec,
           targetBasketRec,
           0.95,
-          true,
+          false,
         );
 
         // --- Verify final state ---
@@ -123,13 +128,13 @@ for (const folioConfig of FOLIO_CONFIGS) {
         const [finalTokens, amountsAfterFinal] = await folio.toAssets(10n ** 18n, 0);
 
         const amountsAfterFinalRec: Record<string, bigint> = {};
-        finalTokens.forEach((token: string, idx: number) => {
-          amountsAfterFinalRec[token] = amountsAfterFinal[idx];
+        orderedTokens.forEach((token: string) => {
+          amountsAfterFinalRec[token] = amountsAfterFinal[finalTokens.indexOf(token)];
         });
 
         let totalAfterFinalValue = 0;
         const finalTokenValuesRec: Record<string, number> = {};
-        finalTokens.forEach((token: string) => {
+        orderedTokens.forEach((token: string) => {
           const price = pricesRec[token].snapshotPrice;
           const amount = amountsAfterFinalRec[token];
           const decimal = decimalsRec[token];
@@ -139,11 +144,12 @@ for (const folioConfig of FOLIO_CONFIGS) {
         });
 
         const finalTargetBasketRec: Record<string, bigint> = {};
-        finalTokens.forEach((token: string) => {
+        orderedTokens.forEach((token: string) => {
           finalTargetBasketRec[token] = bn(((finalTokenValuesRec[token] / totalAfterFinalValue) * 10 ** 18).toString());
         });
-        await logPercentages(`✅ Final`, finalTargetBasketRec, initialTokens);
-        await logPercentages(`🎯 Target basket`, targetBasketRec, initialTokens);
+        await logPercentages(`\n✅ Final    `, finalTargetBasketRec, orderedTokens);
+        await logPercentages(`🎯 Target   `, targetBasketRec, orderedTokens);
+        console.log("");
       });
     }
   });

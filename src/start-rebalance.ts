@@ -1,15 +1,15 @@
-import Decimal from 'decimal.js-light'
+import Decimal from "decimal.js-light";
 
-import { bn, D18d, D27d, ONE, ZERO } from './numbers'
+import { bn, D18d, D27d, ONE, ZERO } from "./numbers";
 
-import { PriceRange, RebalanceLimits, WeightRange } from './types'
+import { PriceRange, RebalanceLimits, WeightRange } from "./types";
 
 // Partial set of the args needed to call `startRebalance()`
 export interface StartRebalanceArgsPartial {
   // tokens: string[]
-  weights: WeightRange[]
-  prices: PriceRange[]
-  limits: RebalanceLimits
+  weights: WeightRange[];
+  prices: PriceRange[];
+  limits: RebalanceLimits;
   // auctionLauncherWindow: bigint
   // ttl: bigint
 }
@@ -38,66 +38,73 @@ export const getStartRebalance = (
   _prices: number[],
   _priceError: number[],
   weightControl: boolean,
-  logging?: boolean
+  debug?: boolean,
 ): StartRebalanceArgsPartial => {
-  if (logging) {
-    console.log('getStartRebalance', _supply, tokens, _folio, decimals, _targetBasket, _prices, _priceError,  weightControl)
+  if (debug) {
+    console.log(
+      "getStartRebalance",
+      _supply,
+      tokens,
+      _folio,
+      decimals,
+      _targetBasket,
+      _prices,
+      _priceError,
+      weightControl,
+    );
   }
 
   // {wholeTok/wholeShare} = D18{tok/share} * {share/wholeShare} / {tok/wholeTok} / D18
-  const folio = _folio.map((c: bigint, i: number) =>
-    new Decimal(c.toString()).div(new Decimal(`1e${decimals[i]}`))
-  )
+  const folio = _folio.map((c: bigint, i: number) => new Decimal(c.toString()).div(new Decimal(`1e${decimals[i]}`)));
 
   // convert price number inputs to bigints
 
   // {USD/wholeTok}
-  const prices = _prices.map((a) => new Decimal(a.toString()))
+  const prices = _prices.map((a) => new Decimal(a.toString()));
   for (let i = 0; i < prices.length; i++) {
     if (prices[i].eq(ZERO)) {
-      throw new Error(`missing price for token ${tokens[i]}`)
+      throw new Error(`missing price for token ${tokens[i]}`);
     }
   }
 
   // {1} = D18{1} / D18
-  const targetBasket = _targetBasket.map((a) =>
-    new Decimal(a.toString()).div(D18d)
-  )
+  const targetBasket = _targetBasket.map((a) => new Decimal(a.toString()).div(D18d));
 
   // {1}
-  const priceError = _priceError.map((a) => new Decimal(a.toString()))
+  const priceError = _priceError.map((a) => new Decimal(a.toString()));
 
   // ================================================================
 
-  const newWeights: WeightRange[] = []
-  const newPrices: PriceRange[] = []
+  const newWeights: WeightRange[] = [];
+  const newPrices: PriceRange[] = [];
   const newLimits: RebalanceLimits = {
-    low: bn('1e18'),
-    spot: bn('1e18'),
-    high: bn('1e18'),
-  }
+    low: bn("1e18"),
+    spot: bn("1e18"),
+    high: bn("1e18"),
+  };
 
   // ================================================================
 
   for (let i = 0; i < tokens.length; i++) {
     if (priceError[i].gte(ONE)) {
-      throw new Error('cannot defer prices')
+      throw new Error("cannot defer prices");
     }
 
     // === newWeights ===
 
     // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
-    const dtfPrice = folio.map((f: Decimal, i: number) => f.mul(prices[i])).reduce((a: Decimal, b: Decimal) => a.add(b))
+    const dtfPrice = folio
+      .map((f: Decimal, i: number) => f.mul(prices[i]))
+      .reduce((a: Decimal, b: Decimal) => a.add(b));
 
     // {wholeTok/wholeShare} = {1} * {USD/wholeShare} / {USD/wholeTok}
-    const spotWeight = targetBasket[i].mul(dtfPrice).div(prices[i])
-
+    const spotWeight = targetBasket[i].mul(dtfPrice).div(prices[i]);
 
     // D27{tok/share}{wholeShare/wholeTok} = D27 * {tok/wholeTok} / {share/wholeShare}
-    const limitMultiplier = D27d.mul(new Decimal(`1e${decimals[i]}`)).div(D18d)
+    const limitMultiplier = D27d.mul(new Decimal(`1e${decimals[i]}`)).div(D18d);
 
-    if (logging) {
-      console.log('limitMultiplier', limitMultiplier.toString())
+    if (debug) {
+      console.log("limitMultiplier", limitMultiplier.toString());
     }
 
     if (!weightControl) {
@@ -106,65 +113,63 @@ export const getStartRebalance = (
         low: bn(spotWeight.mul(limitMultiplier)),
         spot: bn(spotWeight.mul(limitMultiplier)),
         high: bn(spotWeight.mul(limitMultiplier)),
-      })
+      });
     } else {
       // NATIVE case
 
       // {wholeTok/wholeShare} = {wholeTok/wholeShare} / {1}
-      const lowWeight = spotWeight.mul(ONE.div(ONE.add(priceError[i])))
-      const highWeight = spotWeight.mul(ONE.add(priceError[i]))
-
+      const lowWeight = spotWeight.mul(ONE.div(ONE.add(priceError[i])));
+      const highWeight = spotWeight.mul(ONE.add(priceError[i]));
 
       // D27{tok/share} = {wholeTok/wholeShare} * D27{tok/share}{wholeShare/wholeTok} / {BU/share}
       newWeights.push({
         low: bn(lowWeight.mul(limitMultiplier)),
         spot: bn(spotWeight.mul(limitMultiplier)),
         high: bn(highWeight.mul(limitMultiplier)),
-      })
+      });
     }
 
     // === newPrices ===
 
     // D27{wholeTok/tok} = D27 / {tok/wholeTok}
-    const priceMultiplier = D27d.div(new Decimal(`1e${decimals[i]}`))
+    const priceMultiplier = D27d.div(new Decimal(`1e${decimals[i]}`));
 
     // {USD/wholeTok} = {USD/wholeTok} * {1}
-    const lowPrice = prices[i].mul(ONE.sub(priceError[i]))
-    const highPrice = prices[i].mul(ONE.add(priceError[i]))
-
+    const lowPrice = prices[i].mul(ONE.sub(priceError[i]));
+    const highPrice = prices[i].mul(ONE.add(priceError[i]));
 
     // D27{USD/tok} = {USD/wholeTok} * D27{wholeTok/tok}
     newPrices.push({
       low: bn(lowPrice.mul(priceMultiplier)),
       high: bn(highPrice.mul(priceMultiplier)),
-    })
+    });
   }
-  
+
   // update low/high for tracking DTFs
   if (!weightControl) {
     // sum of dot product of targetBasket and priceError
     const totalPortion = targetBasket
-    .map((portion: Decimal, i: number) => portion.mul(priceError[i]))
-    .reduce((a: Decimal, b: Decimal) => a.add(b))
-    
+      .map((portion: Decimal, i: number) => portion.mul(priceError[i]))
+      .reduce((a: Decimal, b: Decimal) => a.add(b));
+
     if (totalPortion.gte(ONE)) {
-      throw new Error('totalPortion > 1')
+      throw new Error("totalPortion > 1");
     }
-    
+
     // D18{BU/share} = {1} * D18 * {BU/share}
-    newLimits.low = bn(ONE.div(ONE.add(totalPortion)).mul(D18d))
-    newLimits.high = bn(ONE.add(totalPortion).mul(D18d))
+    newLimits.low = bn(ONE.div(ONE.add(totalPortion)).mul(D18d));
+    newLimits.high = bn(ONE.add(totalPortion).mul(D18d));
   }
-  
-  if (logging) {
-    console.log("newWeights", newWeights)
-    console.log('newPrices', newPrices)
-    console.log('newLimits', newLimits)
+
+  if (debug) {
+    console.log("newWeights", newWeights);
+    console.log("newPrices", newPrices);
+    console.log("newLimits", newLimits);
   }
 
   return {
     weights: newWeights,
     prices: newPrices,
     limits: newLimits,
-  }
-}
+  };
+};

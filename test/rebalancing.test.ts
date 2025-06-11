@@ -86,7 +86,6 @@ describe("NATIVE DTFs", () => {
     const decimalsS1 = [bn("6"), bn("18"), bn("6")]
     const initialMarketPricesS1 = [1, 1, 1]
     const priceErrorStartRebalanceS1 = [0.1, 0.1, 0.1]
-    const dtfPriceS1 = 1
     const initialFolioS1 = [bn("1e6"), bn("0"), bn("0")] // Represents 1 USDC, 0 DAI, 0 USDT per share (approx value)
     const targetBasketS1 = [bn("0"), bn("0.5e18"), bn("0.5e18")]
     // Folio representing mid-progress for ejection tests: ~20% USDC, ~40% DAI, ~40% USDT by value
@@ -407,7 +406,6 @@ describe("NATIVE DTFs", () => {
     const decimalsS2 = [bn("6"), bn("18"), bn("6")]
     const initialMarketPricesS2 = [1, 1, 1]
     const priceErrorStartRebalanceS2 = [0.1, 0.1, 0.1]
-    const dtfPriceS2 = 1
     // initialFolioS2: approx 0 USDC, 0.5 DAI val, 0.5 USDT val (total val 1 USD for 1 share)
     const initialFolioS2 = [bn("0"), bn("0.5e18"), bn("0.5e6")]
     const targetBasketS2 = [bn("1e18"), bn("0"), bn("0")] // Target 100% USDC
@@ -792,7 +790,6 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
   const decimals = [bn("6"), bn("18"), bn("6")]
   const initialMarketPrices = [1, 1, 1]
   const priceErrorStartRebalance = [0.1, 0.1, 0.1] // For getStartRebalance limits
-  const dtfPrice = 1
   const targetBasketUSDCtoDAIUST = [bn("0"), bn("5e17"), bn("5e17")] // Target 0% USDC, 50% DAI, 50% USDT
   const auctionPriceErrorSmall = [0.01, 0.01, 0.01] // For getOpenAuction price calcs
   const finalStageAtForTest = 0.95 // Standard finalStageAt

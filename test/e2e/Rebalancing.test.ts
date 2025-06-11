@@ -94,8 +94,8 @@ for (const folioConfig of FOLIO_CONFIGS) {
         tokens,
         initialAmountsAsRecord,
         targetWeightsAsRecord,
-        1,
-        true,
+        0.95,
+        false,
       );
     });
   });

@@ -97,9 +97,9 @@ export const getOpenAuction = (
   _prices: number[],
   _priceError: number[],
   _finalStageAt: number,
-  logging?: boolean,
+  debug?: boolean,
 ): [OpenAuctionArgs, AuctionMetrics] => {
-  if (logging) {
+  if (debug) {
     console.log(
       "getOpenAuction",
       rebalance,
@@ -172,14 +172,22 @@ export const getOpenAuction = (
   // calculate ideal spot limit, the actual BU<->share ratio
 
   // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
-  const shareValue = folio.map((f: Decimal, i: number) => f.mul(prices[i])).reduce((a, b) => a.add(b));
+  const shareValue = folio
+    .map((f: Decimal, i: number) => {
+      return rebalance.inRebalance[i] ? f.mul(prices[i]) : ZERO;
+    })
+    .reduce((a, b) => a.add(b));
 
   // {USD/wholeBU} = {wholeTok/wholeBU} * {USD/wholeTok}
   const buValue = weightRanges.map((weightRange, i) => weightRange.spot.mul(prices[i])).reduce((a, b) => a.add(b));
 
-  if (logging) {
+  if (debug) {
     console.log("shareValue", shareValue.toString());
     console.log("buValue", buValue.toString());
+  }
+
+  if (buValue.div(shareValue).gt(10) || shareValue.div(buValue).gt(100)) {
+    throw new Error("buValue and shareValue are too different");
   }
 
   // ================================================================
@@ -195,7 +203,9 @@ export const getOpenAuction = (
 
   // {1} = {wholeTok/wholeShare} * {USD/wholeTok} / {USD/wholeShare}
   const portionBeingEjected = ejectionIndices
-    .map((i) => folio[i].mul(prices[i]))
+    .map((i) => {
+      return rebalance.inRebalance[i] ? folio[i].mul(prices[i]) : ZERO;
+    })
     .reduce((a, b) => a.add(b), ZERO)
     .div(shareValue);
 
@@ -241,7 +251,7 @@ export const getOpenAuction = (
   let rebalanceTarget = ONE;
   let round: AuctionRound = AuctionRound.FINAL;
 
-  if (logging) {
+  if (debug) {
     console.log("initialProgression", initialProgression.toString());
     console.log("progression", progression.toString());
     console.log("relativeProgression", relativeProgression.toString());
@@ -249,37 +259,45 @@ export const getOpenAuction = (
     console.log("finalStageAt", finalStageAt.toString());
   }
 
-  // make it an eject auction if there is 1 bps or more of value to eject
-  if (portionBeingEjected.gte(1e-4)) {
-    round = AuctionRound.EJECT;
-
-    if (relativeProgression.lt(finalStageAt.sub(0.02))) {
-      rebalanceTarget = progression.add(portionBeingEjected.mul(1.1)); // set rebalanceTarget to 10% more than needed to ensure ejection completes
-
-      // do not finish trading yet
-      if (rebalanceTarget.gte(ONE)) {
-        rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt));
-      }
-    }
-  } else if (relativeProgression.lt(finalStageAt.sub(0.02))) {
-    // wiggle room to prevent having to re-run an auction at the same stage after price movement
+  // approach finalStageAt first
+  if (progression.lt(0.99) && relativeProgression.lt(finalStageAt.sub(0.02))) {
     round = AuctionRound.PROGRESS;
 
     rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt));
+
+    if (ONE.sub(rebalanceTarget).lt(0.99)) {
+      rebalanceTarget = ONE;
+    }
+
     if (rebalanceTarget.eq(ONE)) {
       round = AuctionRound.FINAL;
     }
   }
 
-  if (rebalanceTarget.gt(ONE)) {
+  // EJECT
+  if (portionBeingEjected.gt(0)) {
+    round = AuctionRound.EJECT;
+
+    // if the ejections are everything that's left, keep the finalStageAt targeting from above
+    if (progression.add(portionBeingEjected).lt(ONE)) {
+      // else: get rid of all the dust
+      let ejectionTarget = progression.add(portionBeingEjected.mul(1.02)); // buy 2% extra
+      if (ejectionTarget.gt(ONE)) {
+        ejectionTarget = ONE;
+      }
+
+      if (ejectionTarget.gt(rebalanceTarget)) {
+        rebalanceTarget = ejectionTarget;
+      }
+    }
+  }
+
+  if (rebalanceTarget.lte(ZERO) || rebalanceTarget.gt(ONE)) {
     throw new Error("something has gone very wrong");
   }
 
-  if (rebalanceTarget.lt(progression) || ONE.sub(rebalanceTarget).lt(1e-4)) {
-    rebalanceTarget = ONE;
-  }
-
-  if (logging) {
+  if (debug) {
+    console.log("round", round);
     console.log("rebalanceTarget", rebalanceTarget.toString());
   }
 
@@ -300,12 +318,23 @@ export const getOpenAuction = (
     high: bn(spotLimit.add(spotLimit.mul(delta)).mul(D18d)),
   };
 
-  if (round == AuctionRound.EJECT && rebalanceTarget.eq(ONE)) {
-    // aim 1% higher if executed permissonlessly
-    newLimits.spot += (newLimits.spot * 1n) / 100n;
+  // hold some surpluses aside if ejecting
+  if (round == AuctionRound.EJECT) {
+    // buy 0.1% more
+    newLimits.low += newLimits.low / 1000n;
+
+    // aim 1% higher
+    newLimits.spot += newLimits.spot / 100n;
 
     // leave 10% room to increase low in the future if ejection leaves dust behind
-    newLimits.high += (newLimits.high * 10n) / 100n;
+    newLimits.high += newLimits.high / 10n;
+  } else if (round == AuctionRound.FINAL && progression.gt(0.999)) {
+    // if it's the final round and we're within 0.1%, buy 10% more than we need to
+    const delta = bn(ONE.sub(progression).mul(D18d).div(10));
+
+    newLimits.low += (newLimits.low * delta) / 10n ** 18n;
+    newLimits.spot += (newLimits.spot * delta) / 10n ** 18n;
+    newLimits.high += (newLimits.high * delta) / 10n ** 18n;
   }
 
   // low
@@ -332,7 +361,7 @@ export const getOpenAuction = (
     newLimits.high = rebalance.limits.high;
   }
 
-  if (logging) {
+  if (debug) {
     console.log("newLimits", newLimits);
   }
 
@@ -371,12 +400,23 @@ export const getOpenAuction = (
       ),
     };
 
-    if (round == AuctionRound.EJECT && rebalanceTarget.eq(ONE)) {
-      // aim 1% higher if executed permissonlessly
-      newWeightsD27.spot += (newWeightsD27.spot * 1n) / 100n;
+    // hold some surpluses aside if ejecting
+    if (round == AuctionRound.EJECT) {
+      // buy 0.1% more
+      newWeightsD27.low += newWeightsD27.low / 1000n;
+
+      // aim 1% higher
+      newWeightsD27.spot += newWeightsD27.spot / 100n;
 
       // leave 10% room to increase low in the future if ejection leaves dust behind
-      newWeightsD27.high += (newWeightsD27.high * 10n) / 100n;
+      newWeightsD27.high += newWeightsD27.high / 10n;
+    } else if (round == AuctionRound.FINAL && progression.gt(0.999)) {
+      // if it's the final round and we're within 0.1%, buy 10% more than we need to
+      const delta = bn(ONE.sub(progression).mul(D18d).div(10));
+
+      newWeightsD27.low += (newWeightsD27.low * delta) / 10n ** 18n;
+      newWeightsD27.spot += (newWeightsD27.spot * delta) / 10n ** 18n;
+      newWeightsD27.high += (newWeightsD27.high * delta) / 10n ** 18n;
     }
 
     if (newWeightsD27.low < weightRange.low) {
@@ -400,7 +440,7 @@ export const getOpenAuction = (
     return newWeightsD27;
   });
 
-  if (logging) {
+  if (debug) {
     console.log("newWeights", newWeights);
   }
 
@@ -449,7 +489,7 @@ export const getOpenAuction = (
     return pricesD27;
   });
 
-  if (logging) {
+  if (debug) {
     console.log("newPrices", newPrices);
   }
 
@@ -478,19 +518,33 @@ export const getOpenAuction = (
     const buyUpTo = weightRanges[i].low.mul(actualLimits.low);
     const sellDownTo = weightRanges[i].high.mul(actualLimits.high);
 
-    if (folio[i].lt(buyUpTo)) {
+    if (rebalance.inRebalance[i] && folio[i].lt(buyUpTo)) {
       deficitTokens.push(token);
-    } else if (folio[i].gt(sellDownTo)) {
+    } else if (rebalance.inRebalance[i] && folio[i].gt(sellDownTo)) {
       surplusTokens.push(token);
     }
   });
 
+  // ================================================================
+
+  // only return tokens that are in the rebalance
+  const returnTokens = [];
+  const returnWeights = [];
+  const returnPrices = [];
+  for (let i = 0; i < rebalance.tokens.length; i++) {
+    if (rebalance.inRebalance[i]) {
+      returnTokens.push(rebalance.tokens[i]);
+      returnWeights.push(newWeights[i]);
+      returnPrices.push(newPrices[i]);
+    }
+  }
+
   return [
     {
       rebalanceNonce: rebalance.nonce,
-      tokens: rebalance.tokens, // full set of tokens, not pruned to the active buy/sells
-      newWeights: newWeights,
-      newPrices: newPrices,
+      tokens: returnTokens,
+      newWeights: returnWeights,
+      newPrices: returnPrices,
       newLimits: newLimits,
     },
     {
