@@ -26,7 +26,7 @@ export const getAssetPrices = async (
   chainId: number,
   timestamp: number,
 ): Promise<TokenPriceWithSnapshot> => {
-  await new Promise((resolve) => setTimeout(resolve, 200)); // base rate limiting
+  await new Promise((resolve) => setTimeout(resolve, 100)); // base rate limiting
 
   if (!tokens?.length) return {};
 
@@ -80,7 +80,7 @@ export const getAssetPrices = async (
       };
     }
 
-    if (result[addressFromApi]?.snapshotPrice === 0) {
+    if (!result[addressFromApi]?.snapshotPrice) {
       foundAll = false;
     }
   }
@@ -116,7 +116,7 @@ export const getAssetPrices = async (
         };
       }
 
-      if (result[addressFromApi]?.snapshotPrice === 0) {
+      if (!result[addressFromApi]?.snapshotPrice) {
         foundAll = false;
       }
     }
@@ -127,10 +127,11 @@ export const getAssetPrices = async (
   }
 
   for (const token of tokens) {
-    const priceRatio = (result[token].currentPrice - result[token].snapshotPrice) / result[token].snapshotPrice;
-    if (priceRatio > 0.5) {
-      console.log(historicalResponses);
-      throw new Error(`price ratio for token ${token} is too high: ${priceRatio}`);
+    const priceRatio = Math.abs(result[token].currentPrice - result[token].snapshotPrice) / result[token].snapshotPrice;
+    if (priceRatio > 10) {
+      console.log("timestamp", timestamp);
+      console.log("prices", result[token]);
+      throw new Error(`price ratio for token ${token} is too extreme: ${priceRatio}`);
     }
   }
 

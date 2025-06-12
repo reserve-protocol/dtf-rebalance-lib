@@ -1,7 +1,7 @@
 import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import hre from "hardhat";
 import { FOLIO_CONFIGS } from "./constants";
-import { getAssetPrices, getTokenNameAndSymbol, bn } from "./utils";
+import { getAssetPrices, bn } from "./utils";
 import { initializeChainState, deployCommonContracts } from "./lib/setup";
 import { runRebalance } from "./lib/rebalance-helpers";
 import { Contract } from "ethers";
@@ -67,14 +67,6 @@ for (const folioConfig of FOLIO_CONFIGS) {
 
         const pricesRec = await getAssetPrices(orderedTokens, folioConfig.chainId, await time.latest());
 
-        for (const token of orderedTokens) {
-          if (!pricesRec[token] || pricesRec[token].snapshotPrice === 0) {
-            throw new Error(
-              `missing price for token ${token} (${await getTokenNameAndSymbol(token).then((t) => t.symbol)}) for ${folioConfig.name}`,
-            );
-          }
-        }
-
         const [initialTokens, initialAmounts] = await folio.toAssets(10n ** 18n, 0);
 
         const initialAmountsRec: Record<string, bigint> = {};
@@ -85,6 +77,10 @@ for (const folioConfig of FOLIO_CONFIGS) {
         const initialValuesRec: Record<string, number> = {};
         let totalInitialValue = 0;
         orderedTokens.forEach((token: string) => {
+          if (pricesRec[token].snapshotPrice == 0) {
+            throw new Error(`price for token ${token} is 0`);
+          }
+
           initialValuesRec[token] =
             (pricesRec[token].snapshotPrice * Number(initialAmountsRec[token])) / Number(10n ** decimalsRec[token]);
           totalInitialValue += initialValuesRec[token];
@@ -119,37 +115,61 @@ for (const folioConfig of FOLIO_CONFIGS) {
           [...orderedTokens],
           initialAmountsRec,
           targetBasketRec,
+          pricesRec,
           0.95,
           false,
         );
 
         // --- Verify final state ---
 
+        // only used for NATIVE (weightControl=true)
+        const finalPricesRec = await getAssetPrices(orderedTokens, folioConfig.chainId, await time.latest());
+
         const [finalTokens, amountsAfterFinal] = await folio.toAssets(10n ** 18n, 0);
 
         const amountsAfterFinalRec: Record<string, bigint> = {};
         orderedTokens.forEach((token: string) => {
-          amountsAfterFinalRec[token] = amountsAfterFinal[finalTokens.indexOf(token)];
+          const idx = finalTokens.indexOf(token);
+          amountsAfterFinalRec[token] = idx >= 0 ? amountsAfterFinal[idx] : 0n;
         });
 
-        let totalAfterFinalValue = 0;
+        const [weightControl] = await folio.rebalanceControl();
+
+        // these value calculations have to use the initial prices, not current prices
+        let totalValueAfterFinal = 0;
         const finalTokenValuesRec: Record<string, number> = {};
         orderedTokens.forEach((token: string) => {
-          const price = pricesRec[token].snapshotPrice;
+          const price = weightControl ? finalPricesRec[token].snapshotPrice : pricesRec[token].snapshotPrice;
           const amount = amountsAfterFinalRec[token];
           const decimal = decimalsRec[token];
 
           finalTokenValuesRec[token] = (price * Number(amount)) / Number(10n ** decimal);
-          totalAfterFinalValue += finalTokenValuesRec[token];
+          totalValueAfterFinal += finalTokenValuesRec[token];
         });
 
         const finalTargetBasketRec: Record<string, bigint> = {};
         orderedTokens.forEach((token: string) => {
-          finalTargetBasketRec[token] = bn(((finalTokenValuesRec[token] / totalAfterFinalValue) * 10 ** 18).toString());
+          finalTargetBasketRec[token] = bn(((finalTokenValuesRec[token] / totalValueAfterFinal) * 10 ** 18).toString());
         });
-        await logPercentages(`\n✅ Final    `, finalTargetBasketRec, orderedTokens);
+
+        // verify we hit the original intended target, within 0.1%
+        const totalError = orderedTokens
+          .map((token: string) => {
+            return targetBasketRec[token] > finalTargetBasketRec[token]
+              ? targetBasketRec[token] - finalTargetBasketRec[token]
+              : finalTargetBasketRec[token] - targetBasketRec[token];
+          })
+          .reduce((a: bigint, b: bigint) => a + b, 0n);
+
+        await logPercentages(`\n🔍 Final    `, finalTargetBasketRec, orderedTokens);
         await logPercentages(`🎯 Target   `, targetBasketRec, orderedTokens);
-        console.log("");
+
+        if (totalError > 10n ** 15n) {
+          console.log(`⚠️ Error     ${((Number(totalError) / 10 ** 18) * 100).toFixed(2)}%\n`);
+          throw new Error("Total error is too high");
+        } else {
+          console.log(`✅ Error     ${((Number(totalError) / 10 ** 18) * 100).toFixed(2)}%\n`);
+        }
       });
     }
   });

@@ -181,12 +181,15 @@ export const getOpenAuction = (
   // {USD/wholeBU} = {wholeTok/wholeBU} * {USD/wholeTok}
   const buValue = weightRanges.map((weightRange, i) => weightRange.spot.mul(prices[i])).reduce((a, b) => a.add(b));
 
+  const buPriceChange = buValue.sub(shareValue).abs().div(shareValue);
+  console.log(`      🧺  ${buPriceChange.mul(100).toFixed(2)}% price change`);
+
   if (debug) {
     console.log("shareValue", shareValue.toString());
     console.log("buValue", buValue.toString());
   }
 
-  if (buValue.div(shareValue).gt(10) || shareValue.div(buValue).gt(100)) {
+  if (buValue.div(shareValue).gt(10) || shareValue.div(buValue).gt(10)) {
     throw new Error("buValue and shareValue are too different");
   }
 
@@ -265,7 +268,7 @@ export const getOpenAuction = (
 
     rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt));
 
-    if (ONE.sub(rebalanceTarget).lt(0.99)) {
+    if (rebalanceTarget.gte(0.99)) {
       rebalanceTarget = ONE;
     }
 
@@ -323,18 +326,11 @@ export const getOpenAuction = (
     // buy 0.1% more
     newLimits.low += newLimits.low / 1000n;
 
-    // aim 1% higher
+    // aim 1% higher in the future
     newLimits.spot += newLimits.spot / 100n;
 
     // leave 10% room to increase low in the future if ejection leaves dust behind
     newLimits.high += newLimits.high / 10n;
-  } else if (round == AuctionRound.FINAL && progression.gt(0.999)) {
-    // if it's the final round and we're within 0.1%, buy 10% more than we need to
-    const delta = bn(ONE.sub(progression).mul(D18d).div(10));
-
-    newLimits.low += (newLimits.low * delta) / 10n ** 18n;
-    newLimits.spot += (newLimits.spot * delta) / 10n ** 18n;
-    newLimits.high += (newLimits.high * delta) / 10n ** 18n;
   }
 
   // low
@@ -405,18 +401,11 @@ export const getOpenAuction = (
       // buy 0.1% more
       newWeightsD27.low += newWeightsD27.low / 1000n;
 
-      // aim 1% higher
+      // aim 1% higher in the future
       newWeightsD27.spot += newWeightsD27.spot / 100n;
 
       // leave 10% room to increase low in the future if ejection leaves dust behind
       newWeightsD27.high += newWeightsD27.high / 10n;
-    } else if (round == AuctionRound.FINAL && progression.gt(0.999)) {
-      // if it's the final round and we're within 0.1%, buy 10% more than we need to
-      const delta = bn(ONE.sub(progression).mul(D18d).div(10));
-
-      newWeightsD27.low += (newWeightsD27.low * delta) / 10n ** 18n;
-      newWeightsD27.spot += (newWeightsD27.spot * delta) / 10n ** 18n;
-      newWeightsD27.high += (newWeightsD27.high * delta) / 10n ** 18n;
     }
 
     if (newWeightsD27.low < weightRange.low) {
@@ -453,7 +442,9 @@ export const getOpenAuction = (
     // revert if price out of bounds
     const spotPrice = bn(prices[i].mul(D27d).div(decimalScale[i]));
     if (spotPrice < initialPrice.low || spotPrice > initialPrice.high) {
-      throw new Error("spot price out of bounds! auction launcher MUST closeRebalance to prevent loss!");
+      throw new Error(
+        `spot price ${spotPrice.toString()} out of bounds relative to initial range [${initialPrice.low.toString()}, ${initialPrice.high.toString()}]! auction launcher MUST closeRebalance to prevent loss!`,
+      );
     }
 
     if (rebalance.priceControl == PriceControl.NONE) {

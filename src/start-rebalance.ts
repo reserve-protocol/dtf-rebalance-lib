@@ -118,8 +118,8 @@ export const getStartRebalance = (
       // NATIVE case
 
       // {wholeTok/wholeShare} = {wholeTok/wholeShare} / {1}
-      const lowWeight = spotWeight.mul(ONE.div(ONE.add(priceError[i])));
-      const highWeight = spotWeight.mul(ONE.add(priceError[i]));
+      const lowWeight = spotWeight.mul(ONE.sub(priceError[i]));
+      const highWeight = spotWeight.div(ONE.sub(priceError[i]));
 
       // D27{tok/share} = {wholeTok/wholeShare} * D27{tok/share}{wholeShare/wholeTok} / {BU/share}
       newWeights.push({
@@ -157,8 +157,8 @@ export const getStartRebalance = (
     }
 
     // D18{BU/share} = {1} * D18 * {BU/share}
-    newLimits.low = bn(ONE.div(ONE.add(totalPortion)).mul(D18d));
-    newLimits.high = bn(ONE.add(totalPortion).mul(D18d));
+    newLimits.low = bn(ONE.sub(totalPortion).mul(D18d));
+    newLimits.high = bn(ONE.div(ONE.sub(totalPortion)).mul(D18d));
   }
 
   if (debug) {
