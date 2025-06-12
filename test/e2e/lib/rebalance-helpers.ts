@@ -247,10 +247,10 @@ export async function runRebalance(
       ).wait();
     });
 
-    // advance time to halfway through the auction
+    // advance time to 2/3 of the way through the auction
     const auctionId = (await folio.nextAuctionId()) - 1n;
     const [, start, end] = await folio.auctions(auctionId);
-    const bidTime = start + BigInt(end - start) / 2n;
+    const bidTime = start + (BigInt(end - start) * 2n) / 3n;
     await hre.network.provider.send("evm_setNextBlockTimestamp", [bidTime.toString()]);
     await hre.network.provider.send("evm_mine", []);
 
