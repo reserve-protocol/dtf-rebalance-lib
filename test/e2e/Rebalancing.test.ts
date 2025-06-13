@@ -15,7 +15,7 @@ for (const folioConfig of FOLIO_CONFIGS) {
       return deployCommonContracts(hre, folioConfig);
     }
 
-    it.skip("Basic ejection", async function () {
+    it("Basic ejection", async function () {
       const { admin, folio, folioLensTyped, bidder, rebalanceManager, auctionLauncher } =
         await loadFixture(deployFixture);
 

@@ -47,9 +47,9 @@ export const getAssetPrices = async (
   }, {} as TokenPriceWithSnapshot);
 
   // Ensure tokens array is not empty for historical fetch
-  const from = Number(timestamp) - 120;
-  const to = Number(timestamp) + 120;
-  const baseUrl = `${RESERVE_API}historical/prices?chainId=${chainId}&from=${from}&to=${to}&interval=5m&address=`;
+  const from = Number(timestamp) - 3600;
+  const to = Number(timestamp) + 3600;
+  const baseUrl = `${RESERVE_API}historical/prices?chainId=${chainId}&from=${from}&to=${to}&interval=1h&address=`;
 
   // Create a map of original token casing to handle potential discrepancies from historical API if any
   // However, historical API also returns "address" field which should be used.
@@ -123,6 +123,8 @@ export const getAssetPrices = async (
   }
 
   if (!foundAll) {
+    console.log("timestamp", timestamp);
+    console.log("prices", result);
     throw new Error("Failed to fetch all prices");
   }
 

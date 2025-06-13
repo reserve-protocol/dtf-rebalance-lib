@@ -25,7 +25,7 @@ export const CHAIN_RPC_URLS: Record<number, string> = {
 };
 
 export const CHAIN_BLOCK_NUMBERS: Record<number, number | undefined> = {
-  1: 22482445,
+  1: 22082445,
   8453: 31052892,
 };
 

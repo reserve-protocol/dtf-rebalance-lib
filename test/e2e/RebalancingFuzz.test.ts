@@ -152,7 +152,7 @@ for (const folioConfig of FOLIO_CONFIGS) {
           finalTargetBasketRec[token] = bn(((finalTokenValuesRec[token] / totalValueAfterFinal) * 10 ** 18).toString());
         });
 
-        // verify we hit the original intended target, within 0.1%
+        // verify we hit the original intended target, within 1 bps
         const totalError = orderedTokens
           .map((token: string) => {
             return targetBasketRec[token] > finalTargetBasketRec[token]
@@ -164,7 +164,7 @@ for (const folioConfig of FOLIO_CONFIGS) {
         await logPercentages(`\n🔍 Final    `, finalTargetBasketRec, orderedTokens);
         await logPercentages(`🎯 Target   `, targetBasketRec, orderedTokens);
 
-        if (totalError > 10n ** 15n) {
+        if (totalError > 10n ** 14n) {
           console.log(`⚠️ Error     ${((Number(totalError) / 10 ** 18) * 100).toFixed(2)}%\n`);
           throw new Error("Total error is too high");
         } else {

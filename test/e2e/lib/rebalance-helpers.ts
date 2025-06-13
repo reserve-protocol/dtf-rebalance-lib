@@ -84,8 +84,8 @@ export async function runRebalance(
     debug,
   );
 
-  // advance time as-if startRebalance() call was stuck in governance for 7 days
-  await hre.network.provider.send("evm_setNextBlockTimestamp", [(await time.latest()) + 7 * 24 * 60 * 60]);
+  // advance time as-if startRebalance() call was stuck in governance for 5 days
+  await hre.network.provider.send("evm_setNextBlockTimestamp", [(await time.latest()) + 5 * 24 * 60 * 60]);
   await hre.network.provider.send("evm_mine", []);
 
   // start rebalance
@@ -223,7 +223,7 @@ export async function runRebalance(
       amts,
       decimalsArray,
       auctionPrices,
-      auctionPrices.map((_: number) => 0.02),
+      auctionPrices.map((_: number) => 0.01),
       finalStageAt,
       debug,
     );
@@ -247,16 +247,14 @@ export async function runRebalance(
       ).wait();
     });
 
-    // advance time to 2/3 of the way through the auction
+    // advance time to midpoint of auction
     const auctionId = (await folio.nextAuctionId()) - 1n;
     const [, start, end] = await folio.auctions(auctionId);
-    const bidTime = start + (BigInt(end - start) * 2n) / 3n;
+    const bidTime = start + BigInt(end - start) / 2n;
     await hre.network.provider.send("evm_setNextBlockTimestamp", [bidTime.toString()]);
     await hre.network.provider.send("evm_mine", []);
 
-    let allBids = toPlainObject(
-      await folioLensTyped.getAllBids(await folio.getAddress(), auctionId, (await time.latest()) + 1),
-    );
+    let allBids = toPlainObject(await folioLensTyped.getAllBids(await folio.getAddress(), auctionId));
     allBids.sort((a: any, b: any) => getBidValue(b, auctionPricesRec) - getBidValue(a, auctionPricesRec));
 
     while (allBids.length > 0 && getBidValue(allBids[0], auctionPricesRec) >= 1) {
@@ -281,9 +279,7 @@ export async function runRebalance(
         );
       });
 
-      allBids = toPlainObject(
-        await folioLensTyped.getAllBids(await folio.getAddress(), auctionId, (await time.latest()) + 1),
-      );
+      allBids = toPlainObject(await folioLensTyped.getAllBids(await folio.getAddress(), auctionId));
       allBids.sort((a: any, b: any) => getBidValue(b, auctionPricesRec) - getBidValue(a, auctionPricesRec));
     }
 
@@ -303,16 +299,16 @@ export async function runRebalance(
     finalAuctionMetrics = await doAuction(2);
   }
 
-  // ROUND 3
-  if (finalAuctionMetrics.round == AuctionRound.EJECT || finalAuctionMetrics.target !== 1) {
-    finalAuctionMetrics = await doAuction(3);
-  }
-  expect(finalAuctionMetrics.target).to.equal(1);
-
   // verify all tokens with weight 0 have been fully ejected
   for (const token of orderedTokens) {
     if (targetBasket[token] === 0n) {
       expect(await mockedTokensRec[token].balanceOf(await folio.getAddress())).to.equal(0);
     }
   }
+
+  // ROUND 3
+  if (finalAuctionMetrics.round == AuctionRound.EJECT || finalAuctionMetrics.target !== 1) {
+    finalAuctionMetrics = await doAuction(3);
+  }
+  expect(finalAuctionMetrics.target).to.equal(1);
 }

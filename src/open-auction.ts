@@ -174,7 +174,7 @@ export const getOpenAuction = (
   // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
   const shareValue = folio
     .map((f: Decimal, i: number) => {
-      return rebalance.inRebalance[i] ? f.mul(prices[i]) : ZERO;
+      return f.mul(prices[i]);
     })
     .reduce((a, b) => a.add(b));
 
@@ -207,7 +207,7 @@ export const getOpenAuction = (
   // {1} = {wholeTok/wholeShare} * {USD/wholeTok} / {USD/wholeShare}
   const portionBeingEjected = ejectionIndices
     .map((i) => {
-      return rebalance.inRebalance[i] ? folio[i].mul(prices[i]) : ZERO;
+      return folio[i].mul(prices[i]);
     })
     .reduce((a, b) => a.add(b), ZERO)
     .div(shareValue);
@@ -509,9 +509,9 @@ export const getOpenAuction = (
     const buyUpTo = weightRanges[i].low.mul(actualLimits.low);
     const sellDownTo = weightRanges[i].high.mul(actualLimits.high);
 
-    if (rebalance.inRebalance[i] && folio[i].lt(buyUpTo)) {
+    if (folio[i].lt(buyUpTo)) {
       deficitTokens.push(token);
-    } else if (rebalance.inRebalance[i] && folio[i].gt(sellDownTo)) {
+    } else if (folio[i].gt(sellDownTo)) {
       surplusTokens.push(token);
     }
   });
