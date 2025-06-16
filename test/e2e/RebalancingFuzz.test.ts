@@ -153,13 +153,18 @@ for (const folioConfig of FOLIO_CONFIGS) {
         });
 
         // verify we hit the original intended target, within 1 bps
-        const totalError = orderedTokens
+        const totalErrorSquared = orderedTokens
           .map((token: string) => {
-            return targetBasketRec[token] > finalTargetBasketRec[token]
-              ? targetBasketRec[token] - finalTargetBasketRec[token]
-              : finalTargetBasketRec[token] - targetBasketRec[token];
+            const diff =
+              targetBasketRec[token] > finalTargetBasketRec[token]
+                ? targetBasketRec[token] - finalTargetBasketRec[token]
+                : finalTargetBasketRec[token] - targetBasketRec[token];
+
+            return (diff * diff) / 10n ** 18n;
           })
           .reduce((a: bigint, b: bigint) => a + b, 0n);
+
+        const totalError = Math.sqrt(Number(totalErrorSquared) / 10 ** 18);
 
         await logPercentages(`\n🔍 Final    `, finalTargetBasketRec, orderedTokens);
         await logPercentages(`🎯 Target   `, targetBasketRec, orderedTokens);
