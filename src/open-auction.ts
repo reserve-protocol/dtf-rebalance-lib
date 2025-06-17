@@ -18,6 +18,7 @@ export enum AuctionRound {
  * @param absoluteProgression {1} The progression of the auction on an absolute scale
  * @param relativeProgression {1} The relative progression of the auction
  * @param target {1} The target of the auction on an absolute scale
+ * @param relativeTarget {1} The relative target of the auction
  * @param auctionSize {USD} The total value on sale in the auction
  * @param surplusTokens The list of tokens in surplus
  * @param deficitTokens The list of tokens in deficit
@@ -28,6 +29,7 @@ export interface AuctionMetrics {
   absoluteProgression: number;
   relativeProgression: number;
   target: number;
+  relativeTarget: number;
   auctionSize: number;
   surplusTokens: string[];
   deficitTokens: string[];
@@ -295,13 +297,16 @@ export const getOpenAuction = (
     }
   }
 
-  if (rebalanceTarget.lte(ZERO) || rebalanceTarget.gt(ONE)) {
+  if (rebalanceTarget.lte(ZERO) || rebalanceTarget.lt(initialProgression) || rebalanceTarget.gt(ONE)) {
     throw new Error("something has gone very wrong");
   }
+
+  const relativeTarget = rebalanceTarget.sub(initialProgression).div(ONE.sub(initialProgression));
 
   if (debug) {
     console.log("round", round);
     console.log("rebalanceTarget", rebalanceTarget.toString());
+    console.log("relativeTarget", relativeTarget.toString());
   }
 
   // {1}
@@ -544,6 +549,7 @@ export const getOpenAuction = (
       absoluteProgression: progression.toNumber(),
       relativeProgression: relativeProgression.toNumber(),
       target: rebalanceTarget.toNumber(),
+      relativeTarget: relativeTarget.toNumber(),
       auctionSize: valueBeingTraded.toNumber(),
       surplusTokens: surplusTokens,
       deficitTokens: deficitTokens,
