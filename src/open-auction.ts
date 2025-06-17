@@ -101,6 +101,10 @@ export const getOpenAuction = (
   _finalStageAt: number,
   debug?: boolean,
 ): [OpenAuctionArgs, AuctionMetrics] => {
+  if (debug === undefined) {
+    debug = true;
+  }
+
   if (debug) {
     console.log(
       "getOpenAuction",
@@ -249,7 +253,7 @@ export const getOpenAuction = (
   }
 
   // {1} = {1} / {1}
-  const relativeProgression = initialProgression.eq(ONE)
+  let relativeProgression = initialProgression.eq(ONE)
     ? ONE
     : progression.sub(initialProgression).div(ONE.sub(initialProgression));
 
@@ -494,7 +498,7 @@ export const getOpenAuction = (
   // calculate metrics
 
   // {USD} = {1} * {USD/wholeShare} * {wholeShare}
-  const valueBeingTraded = rebalanceTarget.sub(progression).mul(shareValue).mul(supply);
+  let valueBeingTraded = rebalanceTarget.sub(progression).mul(shareValue).mul(supply);
 
   const surplusTokens: string[] = [];
   const deficitTokens: string[] = [];
@@ -510,6 +514,10 @@ export const getOpenAuction = (
   });
 
   rebalance.tokens.forEach((token, i) => {
+    if (!rebalance.inRebalance[i]) {
+      return;
+    }
+
     // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
     const buyUpTo = weightRanges[i].low.mul(actualLimits.low);
     const sellDownTo = weightRanges[i].high.mul(actualLimits.high);
@@ -520,6 +528,14 @@ export const getOpenAuction = (
       surplusTokens.push(token);
     }
   });
+
+  // completed if no surpluses or deficits
+  if (deficitTokens.length == 0 || surplusTokens.length == 0) {
+    rebalanceTarget = ONE;
+    relativeProgression = ONE;
+    progression = ONE;
+    valueBeingTraded = ZERO;
+  }
 
   // ================================================================
 
