@@ -1,8 +1,10 @@
 import Decimal from "decimal.js-light";
 
-import { bn, D18d, D27d, ONE, ZERO } from "./numbers";
+import { bn, D9d, D18d, D27d, ONE, ZERO } from "./numbers";
 
 import { PriceControl, PriceRange, Rebalance, RebalanceLimits, WeightRange } from "./types";
+
+Decimal.set({ precision: 100 });
 
 // Call `getOpenAuction()` to get the current auction round
 export enum AuctionRound {
@@ -65,7 +67,7 @@ export const getTargetBasket = (_initialWeights: WeightRange[], _prices: number[
     const decimalScale = new Decimal(`1e${_decimals[i]}`);
 
     // {USD/wholeBU} = D27{tok/BU} * {BU/wholeBU} / {tok/wholeTok} / D27 * {USD/wholeTok}
-    return new Decimal(initialWeight.spot.toString()).mul(D18d).div(decimalScale).div(D27d).mul(price);
+    return new Decimal(initialWeight.spot.toString()).div(decimalScale).mul(price).div(D9d);
   });
 
   const totalValue = vals.reduce((a, b) => a.add(b));
@@ -165,9 +167,9 @@ export const getOpenAuction = (
   // {wholeTok/wholeBU} = D27{tok/BU} * {BU/wholeBU} / {tok/wholeTok} / D27
   let weightRanges = rebalance.weights.map((range: WeightRange, i: number) => {
     return {
-      low: new Decimal(range.low.toString()).mul(D18d).div(decimalScale[i]).div(D27d),
-      spot: new Decimal(range.spot.toString()).mul(D18d).div(decimalScale[i]).div(D27d),
-      high: new Decimal(range.high.toString()).mul(D18d).div(decimalScale[i]).div(D27d),
+      low: new Decimal(range.low.toString()).div(decimalScale[i]).div(D9d),
+      spot: new Decimal(range.spot.toString()).div(decimalScale[i]).div(D9d),
+      high: new Decimal(range.high.toString()).div(decimalScale[i]).div(D9d),
     };
   });
 
@@ -199,7 +201,7 @@ export const getOpenAuction = (
     })
     .reduce((a, b) => a.add(b));
 
-  const buPriceChange = buValue.sub(shareValue).abs().div(shareValue);
+  const buPriceChange = buValue.sub(shareValue).div(shareValue);
   console.log(`      🧺  ${buPriceChange.mul(100).toFixed(2)}% basket price difference`);
 
   if (debug) {
@@ -412,17 +414,15 @@ export const getOpenAuction = (
       low: bn(
         idealWeight
           .mul(rebalanceTarget.div(actualLimits.low.div(actualLimits.spot))) // add remaining delta into weight
-          .mul(D27d)
-          .mul(decimalScale[i])
-          .div(D18d),
+          .mul(D9d)
+          .mul(decimalScale[i]),
       ),
-      spot: bn(idealWeight.mul(D27d).mul(decimalScale[i]).div(D18d)),
+      spot: bn(idealWeight.mul(D9d).mul(decimalScale[i])),
       high: bn(
         idealWeight
           .mul(ONE.add(delta).div(actualLimits.high.div(actualLimits.spot))) // add remaining delta into weight
-          .mul(D27d)
-          .mul(decimalScale[i])
-          .div(D18d),
+          .mul(D9d)
+          .mul(decimalScale[i]),
       ),
     };
 
@@ -470,7 +470,7 @@ export const getOpenAuction = (
   // D27{USD/tok}
   const newPrices = rebalance.initialPrices.map((initialPrice, i) => {
     // revert if price out of bounds
-    const spotPrice = bn(prices[i].mul(D27d).div(decimalScale[i]));
+    const spotPrice = bn(prices[i].div(decimalScale[i]).mul(D27d));
     if (spotPrice < initialPrice.low || spotPrice > initialPrice.high) {
       throw new Error(
         `spot price ${spotPrice.toString()} out of bounds relative to initial range [${initialPrice.low.toString()}, ${initialPrice.high.toString()}]! auction launcher MUST closeRebalance to prevent loss!`,
@@ -483,8 +483,8 @@ export const getOpenAuction = (
 
     // D27{USD/tok} = {USD/wholeTok} * D27 / {tok/wholeTok}
     const pricesD27 = {
-      low: bn(prices[i].mul(ONE.sub(priceError[i])).mul(D27d).div(decimalScale[i])),
-      high: bn(prices[i].div(ONE.sub(priceError[i])).mul(D27d).div(decimalScale[i])),
+      low: bn(prices[i].mul(ONE.sub(priceError[i])).div(decimalScale[i]).mul(D27d)),
+      high: bn(prices[i].div(ONE.sub(priceError[i])).div(decimalScale[i]).mul(D27d)),
     };
 
     // low
@@ -525,9 +525,9 @@ export const getOpenAuction = (
   // {wholeTok/wholeBU} = D27{tok/BU} * {BU/wholeBU} / {tok/wholeTok} / D27
   weightRanges = newWeights.map((range, i) => {
     return {
-      low: new Decimal(range.low.toString()).mul(D18d).div(decimalScale[i]).div(D27d),
-      spot: new Decimal(range.spot.toString()).mul(D18d).div(decimalScale[i]).div(D27d),
-      high: new Decimal(range.high.toString()).mul(D18d).div(decimalScale[i]).div(D27d),
+      low: new Decimal(range.low.toString()).div(decimalScale[i]).div(D9d),
+      spot: new Decimal(range.spot.toString()).div(decimalScale[i]).div(D9d),
+      high: new Decimal(range.high.toString()).div(decimalScale[i]).div(D9d),
     };
   });
 
