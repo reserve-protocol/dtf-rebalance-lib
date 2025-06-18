@@ -545,15 +545,23 @@ export const getOpenAuction = (
     const sellDownTo = weightRanges[i].high.mul(actualLimits.high);
 
     if (folio[i].lt(buyUpTo)) {
-      deficitTokens.push(token);
+      // {USD} = {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
+      const tokenDeficitValue = deficitValue.add(buyUpTo.sub(folio[i]).mul(prices[i]).mul(supply));
 
-      // {USD} += {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
-      deficitValue = deficitValue.add(buyUpTo.sub(folio[i]).mul(prices[i]).mul(supply));
+      // $1 minimum
+      if (tokenDeficitValue.gte(ONE)) {
+        deficitValue = tokenDeficitValue;
+        deficitTokens.push(token);
+      }
     } else if (folio[i].gt(sellDownTo)) {
-      surplusTokens.push(token);
+      // {USD} = {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
+      const tokenSurplusValue = sellDownTo.sub(folio[i]).mul(prices[i]).mul(supply);
 
-      // {USD} += {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
-      surplusValue = surplusValue.add(folio[i].sub(sellDownTo).mul(prices[i]).mul(supply));
+      // $1 minimum
+      if (tokenSurplusValue.gte(ONE)) {
+        surplusValue = surplusValue.add(tokenSurplusValue);
+        surplusTokens.push(token);
+      }
     }
   });
 
