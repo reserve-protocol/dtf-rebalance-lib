@@ -180,15 +180,27 @@ export const getOpenAuction = (
   // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
   const shareValue = folio
     .map((f: Decimal, i: number) => {
+      if (!rebalance.inRebalance[i]) {
+        return ZERO;
+      }
+
       return f.mul(prices[i]);
     })
     .reduce((a, b) => a.add(b));
 
   // {USD/wholeBU} = {wholeTok/wholeBU} * {USD/wholeTok}
-  const buValue = weightRanges.map((weightRange, i) => weightRange.spot.mul(prices[i])).reduce((a, b) => a.add(b));
+  const buValue = weightRanges
+    .map((weightRange, i) => {
+      if (!rebalance.inRebalance[i]) {
+        return ZERO;
+      }
+
+      return weightRange.spot.mul(prices[i]);
+    })
+    .reduce((a, b) => a.add(b));
 
   const buPriceChange = buValue.sub(shareValue).abs().div(shareValue);
-  console.log(`      🧺  ${buPriceChange.mul(100).toFixed(2)}% price change`);
+  console.log(`      🧺  ${buPriceChange.mul(100).toFixed(2)}% basket price difference`);
 
   if (debug) {
     console.log("shareValue", shareValue.toString());
@@ -196,7 +208,7 @@ export const getOpenAuction = (
   }
 
   if (buValue.div(shareValue).gt(10) || shareValue.div(buValue).gt(10)) {
-    throw new Error("buValue and shareValue are too different");
+    throw new Error("buValue and shareValue are too different, something probably went wrong");
   }
 
   // ================================================================
@@ -205,7 +217,7 @@ export const getOpenAuction = (
 
   const ejectionIndices: number[] = [];
   for (let i = 0; i < rebalance.weights.length; i++) {
-    if (rebalance.weights[i].spot == 0n) {
+    if (rebalance.inRebalance[i] && rebalance.weights[i].spot == 0n) {
       ejectionIndices.push(i);
     }
   }
@@ -221,14 +233,18 @@ export const getOpenAuction = (
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   let progression = folio
     .map((actualBalance, i) => {
+      if (!rebalance.inRebalance[i]) {
+        return ZERO;
+      }
+
       // {wholeTok/wholeShare} = {USD/wholeShare} * {1} / {USD/wholeTok}
       const balanceExpected = shareValue.mul(targetBasket[i]).div(prices[i]);
 
       // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
-      const balanceInBU = balanceExpected.gt(actualBalance) ? actualBalance : balanceExpected;
+      const balanceInBasket = balanceExpected.gt(actualBalance) ? actualBalance : balanceExpected;
 
       // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
-      return balanceInBU.mul(prices[i]);
+      return balanceInBasket.mul(prices[i]);
     })
     .reduce((a, b) => a.add(b))
     .div(shareValue);
@@ -236,14 +252,19 @@ export const getOpenAuction = (
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   const initialProgression = initialFolio
     .map((initialBalance, i) => {
+      // make sure to include tokens that were already ejected
+      if (!rebalance.inRebalance[i] && rebalance.weights[i].spot > 0n) {
+        return ZERO;
+      }
+
       // {wholeTok/wholeShare} = {USD/wholeShare} * {1} / {USD/wholeTok}
       const balanceExpected = shareValue.mul(targetBasket[i]).div(prices[i]);
 
       // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
-      const balanceInBU = balanceExpected.gt(initialBalance) ? initialBalance : balanceExpected;
+      const balanceInBasket = balanceExpected.gt(initialBalance) ? initialBalance : balanceExpected;
 
       // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
-      return balanceInBU.mul(prices[i]);
+      return balanceInBasket.mul(prices[i]);
     })
     .reduce((a, b) => a.add(b))
     .div(shareValue);
@@ -497,9 +518,6 @@ export const getOpenAuction = (
 
   // calculate metrics
 
-  // {USD} = {1} * {USD/wholeShare} * {wholeShare}
-  let valueBeingTraded = rebalanceTarget.sub(progression).mul(shareValue).mul(supply);
-
   const surplusTokens: string[] = [];
   const deficitTokens: string[] = [];
 
@@ -513,6 +531,10 @@ export const getOpenAuction = (
     };
   });
 
+  // {USD}
+  let surplusValue = ZERO;
+  let deficitValue = ZERO;
+
   rebalance.tokens.forEach((token, i) => {
     if (!rebalance.inRebalance[i]) {
       return;
@@ -524,22 +546,32 @@ export const getOpenAuction = (
 
     if (folio[i].lt(buyUpTo)) {
       deficitTokens.push(token);
+
+      // {USD} += {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
+      deficitValue = deficitValue.add(folio[i].sub(buyUpTo).mul(prices[i]).mul(supply));
     } else if (folio[i].gt(sellDownTo)) {
       surplusTokens.push(token);
+
+      // {USD} += {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
+      surplusValue = surplusValue.add(folio[i].sub(sellDownTo).mul(prices[i]).mul(supply));
     }
   });
 
-  // completed if no surpluses or deficits
-  if (deficitTokens.length == 0 || surplusTokens.length == 0) {
-    rebalanceTarget = ONE;
-    relativeProgression = ONE;
-    progression = ONE;
-    valueBeingTraded = ZERO;
-  }
+  // {USD}
+  const valueBeingTraded = surplusValue.gt(deficitValue) ? deficitValue : surplusValue;
+
+  // // completed if nothing to trade
+  // if (valueBeingTraded.eq(ZERO)) {
+  //   round = AuctionRound.FINAL;
+  //   rebalanceTarget = ONE;
+  //   relativeProgression = ONE;
+  //   progression = ONE;
+  // }
+  // // TODO maybe add back
 
   // ================================================================
 
-  // only return tokens that are in the rebalance
+  // filter tokens that are not in the rebalance
   const returnTokens = [];
   const returnWeights = [];
   const returnPrices = [];
