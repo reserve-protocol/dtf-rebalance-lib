@@ -548,7 +548,7 @@ export const getOpenAuction = (
       deficitTokens.push(token);
 
       // {USD} += {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
-      deficitValue = deficitValue.add(folio[i].sub(buyUpTo).mul(prices[i]).mul(supply));
+      deficitValue = deficitValue.add(buyUpTo.sub(folio[i]).mul(prices[i]).mul(supply));
     } else if (folio[i].gt(sellDownTo)) {
       surplusTokens.push(token);
 
