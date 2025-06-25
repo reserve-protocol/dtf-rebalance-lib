@@ -215,7 +215,7 @@ export const getOpenAuction = (
 
   // ================================================================
 
-  // calculate rebalanceTarget
+  // calculate portionBeingEjected
 
   const ejectionIndices: number[] = [];
   for (let i = 0; i < rebalance.weights.length; i++) {
@@ -232,6 +232,16 @@ export const getOpenAuction = (
     .reduce((a, b) => a.add(b), ZERO)
     .div(shareValue);
 
+  // ================================================================
+
+  // calculate progressions
+
+  // {wholeBU/wholeShare} = D18{BU/share} / D18
+  const prevSpotLimit = new Decimal(rebalance.limits.spot.toString()).div(D18d);
+
+  // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
+  const expectedBalances = weightRanges.map((weightRange) => weightRange.spot.mul(prevSpotLimit));
+
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   let progression = folio
     .map((actualBalance, i) => {
@@ -239,11 +249,8 @@ export const getOpenAuction = (
         return ZERO;
       }
 
-      // {wholeTok/wholeShare} = {USD/wholeShare} * {1} / {USD/wholeTok}
-      const balanceExpected = shareValue.mul(targetBasket[i]).div(prices[i]);
-
-      // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
-      const balanceInBasket = balanceExpected.gt(actualBalance) ? actualBalance : balanceExpected;
+      // {wholeTok/wholeShare}
+      const balanceInBasket = expectedBalances[i].gt(actualBalance) ? actualBalance : expectedBalances[i];
 
       // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
       return balanceInBasket.mul(prices[i]);
@@ -259,11 +266,8 @@ export const getOpenAuction = (
         return ZERO;
       }
 
-      // {wholeTok/wholeShare} = {USD/wholeShare} * {1} / {USD/wholeTok}
-      const balanceExpected = shareValue.mul(targetBasket[i]).div(prices[i]);
-
-      // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
-      const balanceInBasket = balanceExpected.gt(initialBalance) ? initialBalance : balanceExpected;
+      // {wholeTok/wholeShare}
+      const balanceInBasket = expectedBalances[i].gt(initialBalance) ? initialBalance : expectedBalances[i];
 
       // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
       return balanceInBasket.mul(prices[i]);
@@ -313,7 +317,7 @@ export const getOpenAuction = (
     // if the ejections are everything that's left, keep the finalStageAt targeting from above
     if (progression.add(portionBeingEjected).lt(ONE)) {
       // else: get rid of all the dust
-      let ejectionTarget = progression.add(portionBeingEjected.mul(1.02)); // buy 2% extra
+      let ejectionTarget = progression.add(portionBeingEjected.mul(1.05)); // buy 5% extra
       if (ejectionTarget.gt(ONE)) {
         ejectionTarget = ONE;
       }
@@ -355,13 +359,6 @@ export const getOpenAuction = (
 
   // hold some surpluses aside if ejecting
   if (round == AuctionRound.EJECT) {
-    // buy 0.1% more
-    newLimits.low += newLimits.low / 1000n;
-
-    // aim 1% higher in the future
-    newLimits.spot += newLimits.spot / 100n;
-
-    // leave 10% room to increase low in the future if ejection leaves dust behind
     newLimits.high += newLimits.high / 10n;
   }
 
@@ -428,13 +425,6 @@ export const getOpenAuction = (
 
     // hold some surpluses aside if ejecting
     if (round == AuctionRound.EJECT) {
-      // buy 0.1% more
-      newWeightsD27.low += newWeightsD27.low / 1000n;
-
-      // aim 1% higher in the future
-      newWeightsD27.spot += newWeightsD27.spot / 100n;
-
-      // leave 10% room to increase low in the future if ejection leaves dust behind
       newWeightsD27.high += newWeightsD27.high / 10n;
     }
 
