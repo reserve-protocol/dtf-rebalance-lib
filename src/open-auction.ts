@@ -234,31 +234,31 @@ export const getOpenAuction = (
 
   // ================================================================
 
+  // calculate progressions
+
   // {wholeBU/wholeShare} = D18{BU/share} / D18
   const prevSpotLimit = new Decimal(rebalance.limits.spot.toString()).div(D18d);
 
-  // calculate progressions
+  // {wholeTok/wholeBU} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
+  const expectedBalances = weightRanges.map((weightRange) => weightRange.spot.mul(prevSpotLimit));
 
-  // {1} = {USD/wholeBU} / {USD/wholeBU}
+  // {1} = {USD/wholeShare} / {USD/wholeShare}
   let progression = folio
     .map((actualBalance, i) => {
       if (!rebalance.inRebalance[i]) {
         return ZERO;
       }
 
-      // {wholeTok/wholeBU} = {wholeTok/wholeShare} / {wholeBU/wholeShare}
-      const actualInBU = actualBalance.div(prevSpotLimit);
+      // {wholeTok/wholeShare}
+      const balanceInBasket = expectedBalances[i].gt(actualBalance) ? actualBalance : expectedBalances[i];
 
-      // {wholeTok/wholeBU}
-      const balanceInBasket = weightRanges[i].spot.gt(actualInBU) ? actualInBU : weightRanges[i].spot;
-
-      // {USD/wholeBU} = {wholeTok/wholeBU} * {USD/wholeTok}
+      // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
       return balanceInBasket.mul(prices[i]);
     })
     .reduce((a, b) => a.add(b))
-    .div(buValue);
+    .div(shareValue);
 
-  // {1} = {USD/wholeBU} / {USD/wholeBU}
+  // {1} = {USD/wholeShare} / {USD/wholeShare}
   const initialProgression = initialFolio
     .map((initialBalance, i) => {
       // make sure to include tokens that were already ejected
@@ -266,17 +266,14 @@ export const getOpenAuction = (
         return ZERO;
       }
 
-      // {wholeTok/wholeBU} = {wholeTok/wholeShare} / {wholeBU/wholeShare}
-      const initialInBU = initialBalance.div(prevSpotLimit);
+      // {wholeTok/wholeShare}
+      const balanceInBasket = expectedBalances[i].gt(initialBalance) ? initialBalance : expectedBalances[i];
 
-      // {wholeTok/wholeBU}
-      const balanceInBasket = weightRanges[i].spot.gt(initialInBU) ? initialInBU : weightRanges[i].spot;
-
-      // {USD/wholeBU} = {wholeTok/wholeBU} * {USD/wholeTok}
+      // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
       return balanceInBasket.mul(prices[i]);
     })
     .reduce((a, b) => a.add(b))
-    .div(buValue);
+    .div(shareValue);
 
   if (progression < initialProgression) {
     progression = initialProgression; // don't go backwards
