@@ -1,9 +1,9 @@
-import DecimalLight from 'decimal.js-light'
+import DecimalLight from "decimal.js-light";
 
-import { bn, D18d } from './numbers'
+import { bn, D18d } from "./numbers";
 
 // Create a local Decimal constructor with custom precision
-const Decimal = DecimalLight.clone({ precision: 100 })
+export const Decimal = DecimalLight.clone({ precision: 100 });
 
 /**
  * This function can be used to get a basket distribution EITHER from a set of historical basket weights
@@ -14,26 +14,18 @@ const Decimal = DecimalLight.clone({ precision: 100 })
  * @param decimals Decimals of each token
  * @returns D18{1} Current basket, total will be around 1e18 but not exactly
  */
-export const getBasketDistribution = (
-  _bals: bigint[],
-  _prices: number[],
-  decimals: bigint[]
-): bigint[] => {
-  const decimalScale = decimals.map((d) => new Decimal(`1e${d}`))
+export const getBasketDistribution = (_bals: bigint[], _prices: number[], decimals: bigint[]): bigint[] => {
+  const decimalScale = decimals.map((d) => new Decimal(`1e${d}`));
 
   // {wholeTok} = {tok} / {tok/wholeTok}
-  const bals = _bals.map((bal, i) =>
-    new Decimal(bal.toString()).div(decimalScale[i])
-  )
+  const bals = _bals.map((bal, i) => new Decimal(bal.toString()).div(decimalScale[i]));
 
   // {USD/wholeTok} = {USD/wholeTok}
-  const prices = _prices.map((a) => new Decimal(a.toString()))
+  const prices = _prices.map((a) => new Decimal(a.toString()));
 
   // {USD} = {wholeTok} * {USD/wholeTok}
-  const totalValue = bals
-    .map((bal, i) => bal.mul(prices[i]))
-    .reduce((a, b) => a.add(b))
+  const totalValue = bals.map((bal, i) => bal.mul(prices[i])).reduce((a, b) => a.add(b));
 
   // D18{1} = {wholeTok} * {USD/wholeTok} / {USD}
-  return bals.map((bal, i) => bn(bal.mul(prices[i]).div(totalValue).mul(D18d)))
-}
+  return bals.map((bal, i) => bn(bal.mul(prices[i]).div(totalValue).mul(D18d)));
+};

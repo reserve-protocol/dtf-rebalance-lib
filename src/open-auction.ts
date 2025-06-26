@@ -1,12 +1,9 @@
-import DecimalLight from "decimal.js-light";
+import { Decimal } from "./utils";
 import type { Decimal as DecimalType } from "decimal.js-light";
 
 import { bn, D9d, D18d, D27d, ONE, ZERO } from "./numbers";
 
 import { PriceControl, PriceRange, Rebalance, RebalanceLimits, WeightRange } from "./types";
-
-// Create a local Decimal constructor with custom precision
-const Decimal = DecimalLight.clone({ precision: 100 });
 
 // Call `getOpenAuction()` to get the current auction round
 export enum AuctionRound {
