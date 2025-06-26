@@ -1,6 +1,10 @@
-import Decimal from "decimal.js-light";
+import DecimalLight from "decimal.js-light";
+import type { Decimal as DecimalType } from "decimal.js-light";
 
 import { bn, D18d, D27d, ONE, ZERO } from "./numbers";
+
+// Create a local Decimal constructor with custom precision
+const Decimal = DecimalLight.clone({ precision: 100 });
 
 import { PriceRange, RebalanceLimits, WeightRange } from "./types";
 
@@ -94,8 +98,8 @@ export const getStartRebalance = (
 
     // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
     const dtfPrice = folio
-      .map((f: Decimal, i: number) => f.mul(prices[i]))
-      .reduce((a: Decimal, b: Decimal) => a.add(b));
+      .map((f: DecimalType, i: number) => f.mul(prices[i]))
+      .reduce((a: DecimalType, b: DecimalType) => a.add(b));
 
     // {wholeTok/wholeShare} = {1} * {USD/wholeShare} / {USD/wholeTok}
     const spotWeight = targetBasket[i].mul(dtfPrice).div(prices[i]);
@@ -149,8 +153,8 @@ export const getStartRebalance = (
   if (!weightControl) {
     // sum of dot product of targetBasket and priceError
     const totalPortion = targetBasket
-      .map((portion: Decimal, i: number) => portion.mul(priceError[i]))
-      .reduce((a: Decimal, b: Decimal) => a.add(b));
+      .map((portion: DecimalType, i: number) => portion.mul(priceError[i]))
+      .reduce((a: DecimalType, b: DecimalType) => a.add(b));
 
     if (totalPortion.gte(ONE)) {
       throw new Error("totalPortion > 1");

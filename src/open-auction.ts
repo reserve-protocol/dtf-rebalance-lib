@@ -1,10 +1,12 @@
-import Decimal from "decimal.js-light";
+import DecimalLight from "decimal.js-light";
+import type { Decimal as DecimalType } from "decimal.js-light";
 
 import { bn, D9d, D18d, D27d, ONE, ZERO } from "./numbers";
 
 import { PriceControl, PriceRange, Rebalance, RebalanceLimits, WeightRange } from "./types";
 
-Decimal.set({ precision: 100 });
+// Create a local Decimal constructor with custom precision
+const Decimal = DecimalLight.clone({ precision: 100 });
 
 // Call `getOpenAuction()` to get the current auction round
 export enum AuctionRound {
@@ -181,7 +183,7 @@ export const getOpenAuction = (
 
   // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
   const shareValue = folio
-    .map((f: Decimal, i: number) => {
+    .map((f: DecimalType, i: number) => {
       if (!rebalance.inRebalance[i]) {
         return ZERO;
       }

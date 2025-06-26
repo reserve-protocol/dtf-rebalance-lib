@@ -1,6 +1,9 @@
-import Decimal from 'decimal.js-light'
+import DecimalLight from 'decimal.js-light'
 
 import { bn, D18d } from './numbers'
+
+// Create a local Decimal constructor with custom precision
+const Decimal = DecimalLight.clone({ precision: 100 })
 
 /**
  * This function can be used to get a basket distribution EITHER from a set of historical basket weights
