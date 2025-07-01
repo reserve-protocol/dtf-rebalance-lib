@@ -275,6 +275,9 @@ export const getOpenAuction = (
     .div(shareValue);
 
   if (progression < initialProgression) {
+    if (debug) {
+      console.log("progression < initialProgression", progression.toString(), initialProgression.toString());
+    }
     progression = initialProgression; // don't go backwards
   }
 
@@ -535,11 +538,11 @@ export const getOpenAuction = (
 
     if (folio[i].lt(buyUpTo)) {
       // {USD} = {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
-      const tokenDeficitValue = deficitValue.add(buyUpTo.sub(folio[i]).mul(prices[i]).mul(supply));
+      const tokenDeficitValue = buyUpTo.sub(folio[i]).mul(prices[i]).mul(supply);
 
       // $1 minimum
       if (tokenDeficitValue.gte(ONE)) {
-        deficitValue = tokenDeficitValue;
+        deficitValue = deficitValue.add(tokenDeficitValue);
         deficitTokens.push(token);
       }
     } else if (folio[i].gt(sellDownTo)) {
