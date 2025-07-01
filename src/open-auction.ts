@@ -307,7 +307,7 @@ export const getOpenAuction = (
 
     rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt));
 
-    if (rebalanceTarget.gte(0.999)) {
+    if (rebalanceTarget.gte(0.997)) {
       rebalanceTarget = ONE;
     }
 
