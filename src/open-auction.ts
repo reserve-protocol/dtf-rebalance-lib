@@ -62,6 +62,10 @@ export const getTargetBasket = (_initialWeights: WeightRange[], _prices: number[
   }
 
   const vals = _initialWeights.map((initialWeight: WeightRange, i: number) => {
+    if (_prices[i] <= 0) {
+      throw new Error(`missing price for token index ${i}`);
+    }
+
     const price = new Decimal(_prices[i]);
     const decimalScale = new Decimal(`1e${_decimals[i]}`);
 
@@ -146,7 +150,7 @@ export const getOpenAuction = (
   // {USD/wholeTok}
   const prices = _prices.map((a) => new Decimal(a));
   for (let i = 0; i < prices.length; i++) {
-    if (prices[i].eq(ZERO)) {
+    if (prices[i].lte(ZERO)) {
       throw new Error(`missing price for token ${rebalance.tokens[i]}`);
     }
   }
@@ -303,7 +307,7 @@ export const getOpenAuction = (
 
     rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt));
 
-    if (rebalanceTarget.gte(0.99)) {
+    if (rebalanceTarget.gte(0.999)) {
       rebalanceTarget = ONE;
     }
 
