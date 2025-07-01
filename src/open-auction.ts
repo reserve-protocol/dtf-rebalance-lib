@@ -547,7 +547,7 @@ export const getOpenAuction = (
       }
     } else if (folio[i].gt(sellDownTo)) {
       // {USD} = {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
-      const tokenSurplusValue = sellDownTo.sub(folio[i]).mul(prices[i]).mul(supply);
+      const tokenSurplusValue = folio[i].sub(sellDownTo).mul(prices[i]).mul(supply);
 
       // $1 minimum
       if (tokenSurplusValue.gte(ONE)) {
