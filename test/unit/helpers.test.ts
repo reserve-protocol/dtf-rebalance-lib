@@ -612,7 +612,7 @@ describe("NATIVE DTFs", () => {
       // Expected: rebalanceTarget=1, delta=0. idealWeight for USDC changes.
       // idealSpot_USDC_D27 was 1e15 at price 1. At price 1.1, idealSpot_D27 becomes 1e15 / 1.1 = 9.09091e14.
       const expectedNewPricesLossUSDC: PriceRange[] = [
-        { low: bn("1.089e21"), high: bn("1.1e21") },
+        { low: bn("1.089e21"), high: bn("1111111111111111111111") }, // 1.1 / 0.99 * 1e21
         { low: bn("9.9e8"), high: bn("1.01e9") },
         { low: bn("9.9e20"), high: bn("1.01e21") },
       ];
@@ -704,11 +704,11 @@ describe("NATIVE DTFs", () => {
 
     assertPricesEqual(newPricesResult[0], {
       low: bn("9e20"), // 1 * 0.9 * 1e21
-      high: bn("1100000000000000000000"), // 1 * 1.1 * 1e21
+      high: bn("1111111111111111111111"), // 1 / 0.9 * 1e21
     });
     assertPricesEqual(newPricesResult[1], {
       low: bn("2700000000000"), // 3000 * 0.9 * 1e9
-      high: bn("3300000000000"), // 3000 * 1.1 * 1e9
+      high: bn("3333333333333"), // 3000 / 0.9 * 1e9
     });
     assertRebalanceLimitsEqual(newLimitsResult, {
       low: bn("1e18"),
@@ -825,15 +825,15 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
     // Prices are same as NATIVE calculation initially
     assertPricesEqual(initialPricesTracking[0], {
       low: bn("9e20"), // 1 * 0.9 * 1e21
-      high: bn("1100000000000000000000"), // 1 * 1.1 * 1e21
+      high: bn("1111111111111111111111"), // 1 / 0.9 * 1e21
     });
     assertPricesEqual(initialPricesTracking[1], {
       low: bn("900000000"), // 1 * 0.9 * 1e9
-      high: bn("1100000000"), // 1 * 1.1 * 1e9
+      high: bn("1111111111"), // 1 / 0.9 * 1e9
     });
     assertPricesEqual(initialPricesTracking[2], {
       low: bn("9e20"), // 1 * 0.9 * 1e21
-      high: bn("1100000000000000000000"), // 1 * 1.1 * 1e21
+      high: bn("1111111111111111111111"), // 1 / 0.9 * 1e21
     });
   });
 

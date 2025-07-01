@@ -137,7 +137,8 @@ export const getStartRebalance = (
 
     // {USD/wholeTok} = {USD/wholeTok} * {1}
     const lowPrice = prices[i].mul(ONE.sub(priceError[i]));
-    const highPrice = prices[i].mul(ONE.add(priceError[i]));
+    // {USD/wholeTok} = {USD/wholeTok} / {1}
+    const highPrice = prices[i].div(ONE.sub(priceError[i]));
 
     // D27{USD/tok} = {USD/wholeTok} * D27{wholeTok/tok}
     newPrices.push({
