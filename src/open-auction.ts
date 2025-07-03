@@ -241,12 +241,17 @@ export const getOpenAuction = (
 
   // calculate progressions
 
+  // {wholeBU/wholeShare} = {USD/wholeShare} / {USD/wholeBU}
+  const spotLimit = shareValue.div(buValue);
+
   // {wholeBU/wholeShare} = D18{BU/share} / D18
   const prevSpotLimit = new Decimal(rebalance.limits.spot.toString()).div(D18d);
+  const maxSpotLimit = spotLimit.gt(prevSpotLimit) ? spotLimit : prevSpotLimit;
 
   // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
-  const expectedBalances = weightRanges.map((weightRange) => weightRange.spot.mul(prevSpotLimit));
+  const expectedBalances = weightRanges.map((weightRange) => weightRange.spot.mul(maxSpotLimit));
 
+  // absolute scale
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   let progression = folio
     .map((actualBalance, i) => {
@@ -263,6 +268,7 @@ export const getOpenAuction = (
     .reduce((a, b) => a.add(b))
     .div(shareValue);
 
+  // absolute scale
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   const initialProgression = initialFolio
     .map((initialBalance, i) => {
@@ -291,7 +297,7 @@ export const getOpenAuction = (
     ? ONE
     : progression.sub(initialProgression).div(ONE.sub(initialProgression));
 
-  let rebalanceTarget = ONE;
+  let rebalanceTarget = ONE; // absolute scale
   let round: AuctionRound = AuctionRound.FINAL;
 
   if (debug) {
@@ -318,6 +324,8 @@ export const getOpenAuction = (
   }
 
   // EJECT
+  // TODO maybe increase threshold to nonzero value, taking into account price
+  //      currently will get stuck trying to eject tiny dust over and over
   if (portionBeingEjected.gt(0)) {
     round = AuctionRound.EJECT;
 
@@ -353,9 +361,6 @@ export const getOpenAuction = (
   // ================================================================
 
   // get new limits, constrained by extremes
-
-  // {wholeBU/wholeShare} = {USD/wholeShare} / {USD/wholeBU}
-  const spotLimit = shareValue.div(buValue);
 
   // D18{BU/share} = {wholeBU/wholeShare} * D18 * {1}
   const newLimits = {
@@ -417,7 +422,7 @@ export const getOpenAuction = (
     const newWeightsD27 = {
       low: bn(
         idealWeight
-          .mul(rebalanceTarget.div(actualLimits.low.div(actualLimits.spot))) // add remaining delta into weight
+          .mul(ONE.sub(delta).div(actualLimits.low.div(actualLimits.spot))) // add remaining delta into weight
           .mul(D9d)
           .mul(decimalScale[i]),
       ),
@@ -468,6 +473,7 @@ export const getOpenAuction = (
   const newPrices = rebalance.initialPrices.map((initialPrice, i) => {
     // revert if price out of bounds
     const spotPrice = bn(prices[i].div(decimalScale[i]).mul(D27d));
+
     if (spotPrice < initialPrice.low || spotPrice > initialPrice.high) {
       throw new Error(
         `spot price ${spotPrice.toString()} out of bounds relative to initial range [${initialPrice.low.toString()}, ${initialPrice.high.toString()}]! auction launcher MUST closeRebalance to prevent loss!`,
@@ -581,7 +587,10 @@ export const getOpenAuction = (
   const returnWeights = [];
   const returnPrices = [];
   for (let i = 0; i < rebalance.tokens.length; i++) {
-    if (rebalance.inRebalance[i]) {
+    if (
+      rebalance.inRebalance[i] &&
+      (surplusTokens.includes(rebalance.tokens[i]) || deficitTokens.includes(rebalance.tokens[i]))
+    ) {
       returnTokens.push(rebalance.tokens[i]);
       returnWeights.push(newWeights[i]);
       returnPrices.push(newPrices[i]);

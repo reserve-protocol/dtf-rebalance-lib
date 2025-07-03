@@ -234,6 +234,10 @@ export async function runRebalance(
       ).toFixed(4)}, ${(Number(openAuctionArgsLocal.newLimits.high) / 1e18).toFixed(4)}]`,
     );
 
+    if (openAuctionArgsLocal.tokens.length == 0) {
+      return auctionMetrics;
+    }
+
     // openAuction()
     await whileImpersonating(hre, await auctionLauncher.getAddress(), async (signer) => {
       await (
