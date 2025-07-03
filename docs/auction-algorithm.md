@@ -1,10 +1,12 @@
-# Open Auction Algorithm Documentation
+# Auction Algorithm
 
 ## Overview
 
-The open auction algorithm is a sophisticated mechanism for rebalancing portfolios (called "Folios") through a series of auction rounds. The algorithm determines what tokens to buy and sell, at what prices, and in what quantities to transition a portfolio from its current state to a target composition.
+The auction algorithm is a sophisticated mechanism for rebalancing portfolios (called "Folios") through a series of auction rounds. The algorithm determines what tokens to buy and sell, at what prices, and in what quantities to transition a portfolio from its current state to a target composition.
 
 The algorithm is designed to handle any number of tokens and supports three types of rebalances, each with different approaches to manipulating weights and limits.
+
+Initially `getStartRebalance()` is called to prepare the initial rebalance parameters. Any number of auctions (serially) are then launched via successive calls to `getOpenAuction()`.
 
 ## Key Concepts
 
