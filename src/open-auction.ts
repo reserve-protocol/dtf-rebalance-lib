@@ -57,6 +57,8 @@ export interface OpenAuctionArgs {
  * @returns D18{1} The target basket
  */
 export const getTargetBasket = (_initialWeights: WeightRange[], _prices: number[], _decimals: bigint[]): bigint[] => {
+  console.log("getTargetBasket", _initialWeights, _prices, _decimals);
+
   if (_initialWeights.length != _prices.length) {
     throw new Error("length mismatch");
   }
@@ -242,7 +244,7 @@ export const getOpenAuction = (
   // {wholeBU/wholeShare} = D18{BU/share} / D18
   const prevSpotLimit = new Decimal(rebalance.limits.spot.toString()).div(D18d);
 
-  // {wholeTok/wholeBU} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
+  // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
   const expectedBalances = weightRanges.map((weightRange) => weightRange.spot.mul(prevSpotLimit));
 
   // {1} = {USD/wholeShare} / {USD/wholeShare}
