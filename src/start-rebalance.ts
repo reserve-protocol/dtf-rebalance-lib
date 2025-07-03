@@ -1,7 +1,7 @@
 import { Decimal } from "./utils";
 import type { Decimal as DecimalType } from "decimal.js-light";
 
-import { bn, D18d, D27d, ONE, ZERO } from "./numbers";
+import { bn, D9d, D18d, D27d, ONE, ZERO } from "./numbers";
 
 import { PriceRange, RebalanceLimits, WeightRange } from "./types";
 
@@ -135,15 +135,11 @@ export const getStartRebalance = (
     // D27{wholeTok/tok} = D27 / {tok/wholeTok}
     const priceMultiplier = D27d.div(new Decimal(`1e${decimals[i]}`));
 
-    // {USD/wholeTok} = {USD/wholeTok} * {1}
-    const lowPrice = prices[i].mul(ONE.sub(priceError[i]));
-    // {USD/wholeTok} = {USD/wholeTok} / {1}
-    const highPrice = prices[i].div(ONE.sub(priceError[i]));
-
-    // D27{USD/tok} = {USD/wholeTok} * D27{wholeTok/tok}
     newPrices.push({
-      low: bn(lowPrice.mul(priceMultiplier)),
-      high: bn(highPrice.mul(priceMultiplier)),
+      // D27{nanoUSD/tok} = {USD/wholeTok} * {1} * D27{wholeTok/tok} * {nanoUSD/USD}
+      low: bn(prices[i].mul(ONE.sub(priceError[i])).mul(priceMultiplier).mul(D9d)),
+      // D27{nanoUSD/tok} = {USD/wholeTok} / {1} * D27{wholeTok/tok} * {nanoUSD/USD}
+      high: bn(prices[i].div(ONE.sub(priceError[i])).mul(priceMultiplier).mul(D9d)),
     });
   }
 

@@ -56,8 +56,19 @@ export interface OpenAuctionArgs {
  * @param _prices {USD/wholeTok} either CURRENT or HISTORICAL prices
  * @returns D18{1} The target basket
  */
-export const getTargetBasket = (_initialWeights: WeightRange[], _prices: number[], _decimals: bigint[]): bigint[] => {
-  console.log("getTargetBasket", _initialWeights, _prices, _decimals);
+export const getTargetBasket = (
+  _initialWeights: WeightRange[],
+  _prices: number[],
+  _decimals: bigint[],
+  debug?: boolean,
+): bigint[] => {
+  if (debug === undefined) {
+    debug = true;
+  }
+
+  if (debug) {
+    console.log("getTargetBasket", _initialWeights, _prices, _decimals);
+  }
 
   if (_initialWeights.length != _prices.length) {
     throw new Error("length mismatch");
@@ -150,7 +161,7 @@ export const getOpenAuction = (
   const targetBasket = _targetBasket.map((a) => new Decimal(a.toString()).div(D18d));
 
   // {USD/wholeTok}
-  const prices = _prices.map((a) => new Decimal(a));
+  const prices = _prices.map((a) => new Decimal(a.toString()));
   for (let i = 0; i < prices.length; i++) {
     if (prices[i].lte(ZERO)) {
       throw new Error(`missing price for token ${rebalance.tokens[i]}`);
@@ -469,10 +480,10 @@ export const getOpenAuction = (
 
   // get new prices, constrained by extremes
 
-  // D27{USD/tok}
+  // D27{nanoUSD/tok}
   const newPrices = rebalance.initialPrices.map((initialPrice, i) => {
-    // revert if price out of bounds
-    const spotPrice = bn(prices[i].div(decimalScale[i]).mul(D27d));
+    // {nanoUSD/tok} = {USD/wholeTok} * {nanoUSD/USD} / {tok/wholeTok} * D27
+    const spotPrice = bn(prices[i].mul(D9d).div(decimalScale[i]).mul(D27d));
 
     if (spotPrice < initialPrice.low || spotPrice > initialPrice.high) {
       throw new Error(
@@ -484,10 +495,10 @@ export const getOpenAuction = (
       return initialPrice;
     }
 
-    // D27{USD/tok} = {USD/wholeTok} * D27 / {tok/wholeTok}
+    // D27{nanoUSD/tok} = {USD/wholeTok} * {nanoUSD/USD} / {tok/wholeTok} * D27
     const pricesD27 = {
-      low: bn(prices[i].mul(ONE.sub(priceError[i])).div(decimalScale[i]).mul(D27d)),
-      high: bn(prices[i].div(ONE.sub(priceError[i])).div(decimalScale[i]).mul(D27d)),
+      low: bn(prices[i].mul(ONE.sub(priceError[i])).mul(D9d).div(decimalScale[i]).mul(D27d)),
+      high: bn(prices[i].div(ONE.sub(priceError[i])).mul(D9d).div(decimalScale[i]).mul(D27d)),
     };
 
     // low

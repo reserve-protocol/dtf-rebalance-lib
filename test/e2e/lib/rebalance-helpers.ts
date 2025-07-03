@@ -202,7 +202,7 @@ export async function runRebalance(
     });
 
     // which target basket we pass to getOpenAuction() depends on TRACKING vs NATIVE weightControl
-    const auctionTargetBasket = getTargetBasket(originalWeights, originalPrices, decimalsArray);
+    const auctionTargetBasket = getTargetBasket(originalWeights, originalPrices, decimalsArray, debug);
 
     const [openAuctionArgsLocal, auctionMetrics] = getOpenAuction(
       {
