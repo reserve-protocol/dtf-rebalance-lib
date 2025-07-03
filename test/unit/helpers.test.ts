@@ -65,9 +65,9 @@ describe("NATIVE DTFs", () => {
   // when market prices are [1,1,1], auctionPriceError is [0.01,0.01,0.01], and priceControl=true,
   // and initialPrices allow this range.
   const defaultExpectedPrices_USDC_DAI_USDT: PriceRange[] = [
-    { low: bn("9.9e20"), high: bn("1.01e21") }, // USDC (D27 from $1, 6dec)
-    { low: bn("9.9e8"), high: bn("1.01e9") }, // DAI (D27 from $1, 18dec)
-    { low: bn("9.9e20"), high: bn("1.01e21") }, // USDT (D27 from $1, 6dec)
+    { low: bn("9.9e29"), high: bn("1.01e30") }, // USDC (D27 nanoUSD from $1, 6dec)
+    { low: bn("9.9e17"), high: bn("1.01e18") }, // DAI (D27 nanoUSD from $1, 18dec)
+    { low: bn("9.9e29"), high: bn("1.01e30") }, // USDT (D27 nanoUSD from $1, 6dec)
   ];
 
   describe("Rebalancing from 100% USDC to 0% USDC, 50% DAI, 50% USDT", () => {
@@ -287,9 +287,9 @@ describe("NATIVE DTFs", () => {
         finalStageAtForTest,
       );
       const expectedNewPricesLoss: PriceRange[] = [
-        { low: bn("9e20"), high: bn("9.09e20") }, // USDC price
-        { low: bn("9.9e8"), high: bn("1.01e9") },
-        { low: bn("9.9e20"), high: bn("1.01e21") },
+        { low: bn("9e29"), high: bn("9.09e29") }, // USDC price (nanoUSD)
+        { low: bn("9.9e17"), high: bn("1.01e18") }, // DAI (nanoUSD)
+        { low: bn("9.9e29"), high: bn("1.01e30") }, // USDT (nanoUSD)
       ];
       // shareValue = 0.9 due to USDC price drop
       // idealWeight calculations affected by shareValue change
@@ -570,9 +570,9 @@ describe("NATIVE DTFs", () => {
       // idealSpotWeight_USDC = shareValue * targetBasket_USDC[0] / actualLimits.spot / prices_USDC[0.9]
       // idealSpot_USDC_D27 was 1e15 at price 1. At price 0.9, idealSpot_D27 becomes 1e15 / 0.9 = 1.111...e15.
       const expectedNewPricesGainUSDC: PriceRange[] = [
-        { low: bn("9e20"), high: bn("9.09e20") },
-        { low: bn("9.9e8"), high: bn("1.01e9") },
-        { low: bn("9.9e20"), high: bn("1.01e21") },
+        { low: bn("9e29"), high: bn("9.09e29") }, // USDC (nanoUSD)
+        { low: bn("9.9e17"), high: bn("1.01e18") }, // DAI (nanoUSD)
+        { low: bn("9.9e29"), high: bn("1.01e30") }, // USDT (nanoUSD)
       ];
       // This new ideal spot (1.111...e15) would get +10% for ejection = 1.222...e15
       // But this exceeds initialWeightsS2[0].high (1.11111e15), so it gets clamped.
@@ -613,9 +613,9 @@ describe("NATIVE DTFs", () => {
       // Expected: rebalanceTarget=1, delta=0. idealWeight for USDC changes.
       // idealSpot_USDC_D27 was 1e15 at price 1. At price 1.1, idealSpot_D27 becomes 1e15 / 1.1 = 9.09091e14.
       const expectedNewPricesLossUSDC: PriceRange[] = [
-        { low: bn("1.089e21"), high: bn("1111111111111111111111") }, // 1.1 / 0.99 * 1e21
-        { low: bn("9.9e8"), high: bn("1.01e9") },
-        { low: bn("9.9e20"), high: bn("1.01e21") },
+        { low: bn("1.089e30"), high: bn("1111111111111111111111111111111") }, // 1.1 / 0.99 * 1e30 (nanoUSD)
+        { low: bn("9.9e17"), high: bn("1.01e18") }, // DAI (nanoUSD)
+        { low: bn("9.9e29"), high: bn("1.01e30") }, // USDT (nanoUSD)
       ];
       // This new ideal spot (9.09091e14) would get +10% for ejection = 9.99999e14
       // This is within the weight range limits, so no clamping needed.
@@ -702,12 +702,12 @@ describe("NATIVE DTFs", () => {
     });
 
     assertPricesEqual(newPricesResult[0], {
-      low: bn("9e20"), // 1 * 0.9 * 1e21
-      high: bn("1111111111111111111111"), // 1 / 0.9 * 1e21
+      low: bn("9e29"), // 1 * 0.9 * 1e30 (nanoUSD)
+      high: bn("1111111111111111111111111111111"), // 1 / 0.9 * 1e30 (nanoUSD)
     });
     assertPricesEqual(newPricesResult[1], {
-      low: bn("2700000000000"), // 3000 * 0.9 * 1e9
-      high: bn("3333333333333"), // 3000 / 0.9 * 1e9
+      low: bn("2700000000000000000000"), // 3000 * 0.9 * 1e18 (nanoUSD)
+      high: bn("3333333333333333333333"), // 3000 / 0.9 * 1e18 (nanoUSD)
     });
     assertRebalanceLimitsEqual(newLimitsResult, {
       low: bn("1e18"),
@@ -823,16 +823,16 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
 
     // Prices are same as NATIVE calculation initially
     assertPricesEqual(initialPricesTracking[0], {
-      low: bn("9e20"), // 1 * 0.9 * 1e21
-      high: bn("1111111111111111111111"), // 1 / 0.9 * 1e21
+      low: bn("9e29"), // 1 * 0.9 * 1e30 (nanoUSD)
+      high: bn("1111111111111111111111111111111"), // 1 / 0.9 * 1e30 (nanoUSD)
     });
     assertPricesEqual(initialPricesTracking[1], {
-      low: bn("900000000"), // 1 * 0.9 * 1e9
-      high: bn("1111111111"), // 1 / 0.9 * 1e9
+      low: bn("900000000000000000"), // 1 * 0.9 * 1e18 (nanoUSD)
+      high: bn("1111111111111111111"), // 1 / 0.9 * 1e18 (nanoUSD)
     });
     assertPricesEqual(initialPricesTracking[2], {
-      low: bn("9e20"), // 1 * 0.9 * 1e21
-      high: bn("1111111111111111111111"), // 1 / 0.9 * 1e21
+      low: bn("9e29"), // 1 * 0.9 * 1e30 (nanoUSD)
+      high: bn("1111111111111111111111111111111"), // 1 / 0.9 * 1e30 (nanoUSD)
     });
   });
 
@@ -886,9 +886,9 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
     ]);
 
     const expectedNewPrices1: PriceRange[] = [
-      { low: bn("9.9e20"), high: bn("1.01e21") }, // USDC
-      { low: bn("9.9e8"), high: bn("1.01e9") }, // DAI
-      { low: bn("9.9e20"), high: bn("1.01e21") }, // USDT
+      { low: bn("9.9e29"), high: bn("1.01e30") }, // USDC (nanoUSD)
+      { low: bn("9.9e17"), high: bn("1.01e18") }, // DAI (nanoUSD)
+      { low: bn("9.9e29"), high: bn("1.01e30") }, // USDT (nanoUSD)
     ];
     assertPricesEqual(openAuctionArgs1.newPrices[0], expectedNewPrices1[0]);
     assertPricesEqual(openAuctionArgs1.newPrices[1], expectedNewPrices1[1]);
@@ -938,12 +938,12 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
     ]);
     // Prices same as step 1 if market prices didn't change
     assertPricesEqual(openAuctionArgs2.newPrices[0], {
-      low: bn("9.9e8"),
-      high: bn("1.01e9"),
+      low: bn("9.9e17"), // DAI (nanoUSD)
+      high: bn("1.01e18"),
     });
     assertPricesEqual(openAuctionArgs2.newPrices[1], {
-      low: bn("9.9e20"),
-      high: bn("1.01e21"),
+      low: bn("9.9e29"), // USDT (nanoUSD)
+      high: bn("1.01e30"),
     });
   });
 
@@ -988,12 +988,12 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
     ]);
     // Prices same as step 1 if market prices didn't change
     assertPricesEqual(openAuctionArgs3.newPrices[0], {
-      low: bn("9.9e8"),
-      high: bn("1.01e9"),
+      low: bn("9.9e17"), // DAI (nanoUSD)
+      high: bn("1.01e18"),
     });
     assertPricesEqual(openAuctionArgs3.newPrices[1], {
-      low: bn("9.9e20"),
-      high: bn("1.01e21"),
+      low: bn("9.9e29"), // USDT (nanoUSD)
+      high: bn("1.01e30"),
     });
   });
 });
@@ -1013,9 +1013,9 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
     { low: bn("4.5e14"), spot: bn("5e14"), high: bn("5.55556e14") },
   ];
   const hybridInitialPrices: PriceRange[] = [
-    { low: bn("9e20"), high: bn("1.11111e21") },
-    { low: bn("9e8"), high: bn("1.11111e9") },
-    { low: bn("9e20"), high: bn("1.11111e21") },
+    { low: bn("9e29"), high: bn("1.11111e30") }, // nanoUSD
+    { low: bn("9e17"), high: bn("1.11111e18") }, // nanoUSD
+    { low: bn("9e29"), high: bn("1.11111e30") }, // nanoUSD
   ];
   const hybridLimits_veryWide: RebalanceLimits = {
     low: bn("1"),
@@ -1036,9 +1036,9 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
   const currentMarketPrices_Hybrid = [1, 1, 1]; // Defined for this scope
 
   const defaultPricesHybridScope: PriceRange[] = [
-    { low: bn("9.9e20"), high: bn("1.01e21") }, // USDC
-    { low: bn("9.9e8"), high: bn("1.01e9") }, // DAI
-    { low: bn("9.9e20"), high: bn("1.01e21") }, // USDT
+    { low: bn("9.9e29"), high: bn("1.01e30") }, // USDC (nanoUSD)
+    { low: bn("9.9e17"), high: bn("1.01e18") }, // DAI (nanoUSD)
+    { low: bn("9.9e29"), high: bn("1.01e30") }, // USDT (nanoUSD)
   ];
 
   it("Hybrid Scenario 1: Mid-Rebalance (progression < finalStageAt)", () => {
@@ -1276,8 +1276,8 @@ describe("Price Edge Cases in getOpenAuction", () => {
   it('should throw "spot price out of bounds!" when market price is outside initial price bounds', () => {
     // Set up narrow initial price bounds that are below the market price
     const initialPricesNarrowUSDC: PriceRange[] = [
-      { low: bn("8e20"), high: bn("8.5e20") }, // USDC: Range 0.8 - 0.85 USD
-      { low: bn("9e8"), high: bn("1.11111e9") }, // DAI: Normal range
+      { low: bn("8e29"), high: bn("8.5e29") }, // USDC: Range 0.8 - 0.85 USD in nanoUSD
+      { low: bn("9e17"), high: bn("1.11111e18") }, // DAI: Normal range (nanoUSD)
     ];
 
     const mockRebalanceEdge: Rebalance = {
@@ -1297,9 +1297,9 @@ describe("Price Edge Cases in getOpenAuction", () => {
     };
 
     // Market price is $1.0, but initial bounds are only 0.8-0.85
-    // spotPrice = 1.0 * 1e27 / 1e6 = 1e21
-    // initialPrice.high = 8.5e20
-    // Since 1e21 > 8.5e20, this triggers "spot price out of bounds!"
+    // spotPrice = 1.0 * 1e9 * 1e27 / 1e6 = 1e30
+    // initialPrice.high = 8.5e29
+    // Since 1e30 > 8.5e29, this triggers "spot price out of bounds!"
     const currentMarketPrices = [1.0, 1.0]; // USDC at $1.0 is above the 0.8-0.85 range
 
     assert.throws(
@@ -1325,8 +1325,8 @@ describe("Price Edge Cases in getOpenAuction", () => {
   it('should throw "no price range" when price clamping results in identical low and high prices', () => {
     // Set up initial price bounds where low == high (degenerate range)
     const initialPricesSameValue: PriceRange[] = [
-      { low: bn("1e21"), high: bn("1e21") }, // USDC: Exactly $1.0 (no range)
-      { low: bn("9e8"), high: bn("1.11111e9") }, // DAI: Normal range
+      { low: bn("1e30"), high: bn("1e30") }, // USDC: Exactly $1.0 in nanoUSD (no range)
+      { low: bn("9e17"), high: bn("1.11111e18") }, // DAI: Normal range (nanoUSD)
     ];
 
     const mockRebalanceEdge: Rebalance = {
@@ -1346,11 +1346,11 @@ describe("Price Edge Cases in getOpenAuction", () => {
     };
 
     // Market price is $1.0, which matches the initial price bounds exactly
-    // spotPrice = 1.0 * 1e27 / 1e6 = 1e21 == initialPrice.low == initialPrice.high ✓
+    // spotPrice = 1.0 * 1e9 * 1e27 / 1e6 = 1e30 == initialPrice.low == initialPrice.high ✓
     // But when we calculate pricesD27 with price error:
-    // pricesD27.low = 1.0 * 0.99 * 1e27 / 1e6 = 9.9e20, gets clamped to 1e21
-    // pricesD27.high = 1.0 / 0.99 * 1e27 / 1e6 ≈ 1.0101e21, gets clamped to 1e21
-    // Result: pricesD27.low == pricesD27.high == 1e21, triggering "no price range"
+    // pricesD27.low = 1.0 * 0.99 * 1e9 * 1e27 / 1e6 = 9.9e29, gets clamped to 1e30
+    // pricesD27.high = 1.0 / 0.99 * 1e9 * 1e27 / 1e6 ≈ 1.0101e30, gets clamped to 1e30
+    // Result: pricesD27.low == pricesD27.high == 1e30, triggering "no price range"
     const currentMarketPrices = [1.0, 1.0];
 
     assert.throws(
