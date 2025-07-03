@@ -14,16 +14,17 @@ Initially `getStartRebalance()` is called to prepare the initial rebalance param
 
 1. **Weights** (`WeightRange`): Represent the amount of tokens per basket unit (BU). Expressed as D27 values with low/spot/high ranges.
 
-   - Formula: `{tok/BU}`
+   - Formula: `D27{tok/BU}`
    - Used to define the target composition of the basket
 
 2. **Limits** (`RebalanceLimits`): Define the relationship between basket units and shares. Expressed as D18 values with low/spot/high ranges.
 
-   - Formula: `{BU/share}`
+   - Formula: `D18{BU/share}`
    - Used to scale the basket composition to actual share holdings
 
 3. **Prices** (`PriceRange`): Token prices in nanoUSD (D27 format) with low/high bounds for auction pricing.
 
+   - Formula: `D27{nanoUSD/tok}`
    - Used to calculate values and determine trading ranges
 
 4. **Target Basket**: A normalized representation (D18 format) of the portfolio's target composition by value percentage.
