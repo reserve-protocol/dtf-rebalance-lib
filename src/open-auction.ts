@@ -86,13 +86,13 @@ export const getTargetBasket = (_initialWeights: WeightRange[], _prices: number[
  *
  * Non-AUCTION_LAUNCHERs should use `folio.openAuctionUnrestricted()`
  *
- * @param rebalance The result of calling folio.getRebalance()
+ * @param rebalance The result of calling folio.getRebalance(), today
  * @param _supply {share} The totalSupply() of the basket, today
  * @param _initialFolio D18{tok/share} Initial balances per share, e.g result of folio.toAssets(1e18, 0) at time rebalance was first proposed
  * @param _targetBasket D18{1} Result of calling `getTargetBasket()`
- * @param _folio D18{tok/share} Current ratio of token per share, e.g result of folio.toAssets(1e18, 0)
+ * @param _folio D18{tok/share} Current ratio of token per share, e.g result of folio.toAssets(1e18, 0), today
  * @param _decimals Decimals of each token
- * @param _prices {USD/wholeTok} USD prices for each *whole* token
+ * @param _prices {USD/wholeTok} USD prices for each *whole* token, today
  * @param _priceError {1} Price error to use for each token during auction pricing; should be smaller than price error during startRebalance
  * @param _finalStageAt {1} The % rebalanced from the initial Folio to determine when is the final stage of the rebalance
  */
@@ -266,8 +266,7 @@ export const getOpenAuction = (
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   const initialProgression = initialFolio
     .map((initialBalance, i) => {
-      // make sure to include tokens that were already ejected
-      if (!rebalance.inRebalance[i] && rebalance.weights[i].spot > 0n) {
+      if (!rebalance.inRebalance[i]) {
         return ZERO;
       }
 
@@ -284,7 +283,7 @@ export const getOpenAuction = (
     if (debug) {
       console.log("progression < initialProgression", progression.toString(), initialProgression.toString());
     }
-    progression = initialProgression; // don't go backwards
+    progression = initialProgression; // don't go backwards, should only happen due to negligible rounding errors
   }
 
   // {1} = {1} / {1}
