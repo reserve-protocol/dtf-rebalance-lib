@@ -1,7 +1,7 @@
 import { Decimal } from "./utils";
 import type { Decimal as DecimalType } from "decimal.js-light";
 
-import { bn, D9d, D18d, D27d, ONE, ZERO } from "./numbers";
+import { bn, D9d, D18d, D27d, D27n, ONE, ZERO } from "./numbers";
 
 import { PriceRange, RebalanceLimits, WeightRange } from "./types";
 
@@ -29,7 +29,7 @@ export interface StartRebalanceArgsPartial {
  * @param _priceError {1} Price error per token to use in the rebalance; should be larger than price error during openAuction
  * @param _dtfPrice {USD/wholeShare} DTF price
  * @param weightControl TRACKING=false, NATIVE=true
- * @param lastMinuteRemovals If the low weight for tokens in the basket should always be 1 to support last minute removal
+ * @param deferWeights Whether to use the full range for weights, only possible for NATIVE DTFs
  */
 export const getStartRebalance = (
   _supply: bigint,
@@ -40,7 +40,7 @@ export const getStartRebalance = (
   _prices: number[],
   _priceError: number[],
   weightControl: boolean,
-  lastMinuteRemovals: boolean,
+  deferWeights: boolean,
   debug?: boolean,
 ): StartRebalanceArgsPartial => {
   if (debug) {
@@ -54,8 +54,12 @@ export const getStartRebalance = (
       _prices,
       _priceError,
       weightControl,
-      lastMinuteRemovals,
+      deferWeights,
     );
+  }
+
+  if (deferWeights && !weightControl) {
+    throw new Error("deferWeights is not supported for tracking DTFs");
   }
 
   // {wholeTok/wholeShare} = D18{tok/share} * {share/wholeShare} / {tok/wholeTok} / D18
@@ -81,17 +85,10 @@ export const getStartRebalance = (
 
   const newWeights: WeightRange[] = [];
   const newPrices: PriceRange[] = [];
-  const newLimits: RebalanceLimits = {
-    low: bn("1e18"),
-    spot: bn("1e18"),
-    high: bn("1e18"),
-  };
-
-  // ================================================================
 
   for (let i = 0; i < tokens.length; i++) {
     if (priceError[i].gte(ONE)) {
-      throw new Error("cannot defer prices");
+      throw new Error("price error >= 1");
     }
 
     // === newWeights ===
@@ -112,6 +109,8 @@ export const getStartRebalance = (
     }
 
     if (!weightControl) {
+      // TRACKING case
+
       // D27{tok/BU} = {wholeTok/wholeShare} * D27{tok/share}{wholeShare/wholeTok} / {BU/share}
       newWeights.push({
         low: bn(spotWeight.mul(limitMultiplier)),
@@ -131,11 +130,12 @@ export const getStartRebalance = (
         spot: bn(spotWeight.mul(limitMultiplier)),
         high: bn(highWeight.mul(limitMultiplier)),
       });
-    }
 
-    // lastMinuteRemovals: set smallest low weight possible to support virtual removal from the basket
-    if (lastMinuteRemovals && newWeights[i].low > 0n) {
-      newWeights[i].low = 1n;
+      // deferWeights case
+      if (deferWeights && newWeights[i].low > 0n) {
+        newWeights[i].low = 1n;
+        newWeights[i].high = D27n * D27n; // 1e54 MAX_WEIGHT
+      }
     }
 
     // === newPrices ===
@@ -151,21 +151,26 @@ export const getStartRebalance = (
     });
   }
 
-  // update low/high for tracking DTFs
-  if (!weightControl) {
-    // sum of dot product of targetBasket and priceError
-    const totalPortion = targetBasket
-      .map((portion: DecimalType, i: number) => portion.mul(priceError[i]))
-      .reduce((a: DecimalType, b: DecimalType) => a.add(b));
+  // ================================================================
 
-    if (totalPortion.gte(ONE)) {
-      throw new Error("totalPortion > 1");
-    }
+  // newLimits
 
-    // D18{BU/share} = {1} * D18 * {BU/share}
-    newLimits.low = bn(ONE.sub(totalPortion).mul(D18d));
-    newLimits.high = bn(ONE.div(ONE.sub(totalPortion)).mul(D18d));
+  // sum of dot product of targetBasket and priceError
+  const basketError = targetBasket
+    .map((portion: DecimalType, i: number) => portion.mul(priceError[i]))
+    .reduce((a: DecimalType, b: DecimalType) => a.add(b));
+
+  if (basketError.gte(ONE)) {
+    throw new Error("basketError >= 1");
   }
+
+  const newLimits: RebalanceLimits = {
+    low: weightControl ? bn("1e18") : bn(ONE.sub(basketError).mul(D18d)),
+    spot: bn("1e18"),
+    high: weightControl ? bn("1e18") : bn(ONE.div(ONE.sub(basketError)).mul(D18d)),
+  };
+
+  // ================================================================
 
   if (debug) {
     console.log("newWeights", newWeights);

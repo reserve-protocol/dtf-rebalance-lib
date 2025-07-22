@@ -101,7 +101,7 @@ describe("NATIVE DTFs", () => {
         initialMarketPricesS1,
         priceErrorStartRebalanceS1,
         true, // weightControl: true for NATIVE-style
-        false, // lastMinuteRemovals
+        false, // deferWeights
       );
       initialWeightsS1 = weights;
       initialPricesS1 = prices;
@@ -178,9 +178,9 @@ describe("NATIVE DTFs", () => {
       });
     });
 
-    it("Step 1b: Ejection Phase with lastMinuteRemovals (initial folio, priceControl=true, prices=[1,1,1])", () => {
-      // Setup with lastMinuteRemovals: true
-      const { weights: weightsWithLastMinute, prices: pricesWithLastMinute, limits: limitsWithLastMinute } = getStartRebalance(
+    it("Step 1b: Ejection Phase with deferWeights (initial folio, priceControl=true, prices=[1,1,1])", () => {
+      // Setup with deferWeights: true
+      const { weights: weightsDeferred, prices: pricesDeferred, limits: limitsDeferred } = getStartRebalance(
         supply,
         tokens,
         initialFolioS1,
@@ -189,25 +189,33 @@ describe("NATIVE DTFs", () => {
         initialMarketPricesS1,
         priceErrorStartRebalanceS1,
         true, // weightControl
-        true, // lastMinuteRemovals: true
+        true, // deferWeights: true
       );
       
-      // Verify that lastMinuteRemovals set the low weights correctly
-      assert.equal(weightsWithLastMinute[0].low, 0n); // USDC target is 0, so low stays 0
-      assert.equal(weightsWithLastMinute[1].low, 1n); // DAI low should be 1
-      assert.equal(weightsWithLastMinute[2].low, 1n); // USDT low should be 1
+      // Verify that deferWeights set the weights and limits correctly
+      assert.equal(weightsDeferred[0].low, 0n); // USDC target is 0, so low stays 0
+      assert.equal(weightsDeferred[0].high, 0n); // USDC target is 0, so high stays 0
+      assert.equal(weightsDeferred[1].low, 1n); // DAI low should be 1
+      assert.equal(weightsDeferred[1].high, bn("1e54")); // DAI high should be 1e54 (D27n * D27n)
+      assert.equal(weightsDeferred[2].low, 1n); // USDT low should be 1
+      assert.equal(weightsDeferred[2].high, bn("1e54")); // USDT high should be 1e54
+      
+      // Verify limits are set correctly (with weightControl=true, limits are fixed at 1e18)
+      assert.equal(limitsDeferred.low, bn("1e18")); // Low limit should be 1e18
+      assert.equal(limitsDeferred.spot, bn("1e18")); // Spot limit unchanged
+      assert.equal(limitsDeferred.high, bn("1e18")); // High limit should be 1e18
       
       // Create mockRebalance with these weights
-      const mockRebalanceWithLastMinute: Rebalance = {
+      const mockRebalanceDeferred: Rebalance = {
         ...mockRebalanceBaseS1,
-        weights: weightsWithLastMinute,
-        initialPrices: pricesWithLastMinute,
-        limits: limitsWithLastMinute,
+        weights: weightsDeferred,
+        initialPrices: pricesDeferred,
+        limits: limitsDeferred,
         priceControl: PriceControl.PARTIAL,
       };
       
       const [openAuctionArgs] = getOpenAuction(
-        mockRebalanceWithLastMinute,
+        mockRebalanceDeferred,
         supply,
         initialFolioS1,
         targetBasketS1,
@@ -219,26 +227,26 @@ describe("NATIVE DTFs", () => {
       );
       
       // The getOpenAuction function will calculate ideal weights and then clamp them
-      // Since rebalance.weights[1].low = 1 and rebalance.weights[2].low = 1,
-      // the calculated low weights should be clamped to at least 1
+      // With deferWeights, the weight ranges are extremely wide
+      // Since this is an ejection phase, high weights get +10%
       assertOpenAuctionArgsEqual(openAuctionArgs, {
         rebalanceNonce: 1n,
         tokens: tokens,
         newWeights: [
-          weightsWithLastMinute[0], // USDC: unchanged
+          weightsDeferred[0], // USDC: unchanged (still 0)
           {
-            low: bn("475000000000000000000000000"), // This will be clamped by rebalance.weights[1].low
+            low: bn("475000000000000000000000000"), // Calculated value, clamped between 1 and 1e54
             spot: bn("500000000000000000000000000"),
-            high: bn("555555555555555555555555556"),
+            high: bn("577500000000000000000000000"), // 525e24 * 1.1 for ejection = 577.5e24
           },
           {
-            low: bn("475000000000000"), // This will be clamped by rebalance.weights[2].low
+            low: bn("475000000000000"), // Calculated value, clamped between 1 and 1e54
             spot: bn("500000000000000"), 
-            high: bn("555555555555556"),
+            high: bn("577500000000000"), // 525e12 * 1.1 for ejection = 577.5e12
           },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
-        newLimits: limitsWithLastMinute,
+        newLimits: limitsDeferred,
       });
     });
 
@@ -496,7 +504,7 @@ describe("NATIVE DTFs", () => {
         initialMarketPricesS2,
         priceErrorStartRebalanceS2,
         true,
-        false, // lastMinuteRemovals
+        false, // deferWeights
       );
       initialWeightsS2 = weights;
       initialPricesS2 = prices;
@@ -764,7 +772,7 @@ describe("NATIVE DTFs", () => {
       prices,
       priceError,
       true, // weightControl: true
-      false, // lastMinuteRemovals
+      false, // deferWeights
     );
     assert.equal(newWeights.length, 2);
     assert.equal(newPricesResult.length, 2);
@@ -839,7 +847,7 @@ describe("NATIVE DTFs", () => {
         prices,
         priceError,
         true, // weightControl: true
-        false, // lastMinuteRemovals
+        false, // deferWeights
       );
       assert.equal(newWeights.length, currentTokens.length);
       assert.equal(newPricesResult.length, currentTokens.length);
@@ -874,7 +882,7 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
     initialMarketPrices,
     priceErrorStartRebalance,
     false, // weightControl: false for TRACKING-style weights and limits
-    false, // lastMinuteRemovals
+    false, // deferWeights
   );
 
   it("Step 0: Verifies initial setup from getStartRebalance (TRACKING)", () => {

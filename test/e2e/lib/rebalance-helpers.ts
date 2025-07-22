@@ -81,7 +81,7 @@ export async function runRebalance(
     pricesArray,
     pricesArray.map((_: number) => 0.5), // MEDIUM setting
     weightControl,
-    false, // lastMinuteRemoval
+    false, // deferWeights
     debug,
   );
 
