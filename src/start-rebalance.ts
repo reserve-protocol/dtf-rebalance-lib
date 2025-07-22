@@ -26,9 +26,10 @@ export interface StartRebalanceArgsPartial {
  * @param decimals Decimals of each token
  * @param _targetBasket D18{1} Ideal basket
  * @param _prices {USD/wholeTok} USD prices for each *whole* token
- * @param _priceError {1} Price error per token to use in the rebalanc; should be larger than price error during openAuction
+ * @param _priceError {1} Price error per token to use in the rebalance; should be larger than price error during openAuction
  * @param _dtfPrice {USD/wholeShare} DTF price
  * @param weightControl TRACKING=false, NATIVE=true
+ * @param lastMinuteRemovals If the low weight for tokens in the basket should always be 1 to support last minute removal
  */
 export const getStartRebalance = (
   _supply: bigint,
@@ -39,6 +40,7 @@ export const getStartRebalance = (
   _prices: number[],
   _priceError: number[],
   weightControl: boolean,
+  lastMinuteRemovals: boolean,
   debug?: boolean,
 ): StartRebalanceArgsPartial => {
   if (debug) {
@@ -52,6 +54,7 @@ export const getStartRebalance = (
       _prices,
       _priceError,
       weightControl,
+      lastMinuteRemovals,
     );
   }
 
@@ -128,6 +131,11 @@ export const getStartRebalance = (
         spot: bn(spotWeight.mul(limitMultiplier)),
         high: bn(highWeight.mul(limitMultiplier)),
       });
+    }
+
+    // lastMinuteRemovals: set smallest low weight possible to support virtual removal from the basket
+    if (lastMinuteRemovals && newWeights[i].low > 0n) {
+      newWeights[i].low = 1n;
     }
 
     // === newPrices ===

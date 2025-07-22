@@ -101,6 +101,7 @@ describe("NATIVE DTFs", () => {
         initialMarketPricesS1,
         priceErrorStartRebalanceS1,
         true, // weightControl: true for NATIVE-style
+        false, // lastMinuteRemovals
       );
       initialWeightsS1 = weights;
       initialPricesS1 = prices;
@@ -165,11 +166,79 @@ describe("NATIVE DTFs", () => {
         tokens: tokens, // All tokens are returned (USDC has surplus, DAI/USDT have deficits)
         newWeights: [
           initialWeightsS1[0], // USDC target 0
-          { low: bn("475000000000000000000000000"), spot: bn("500000000000000000000000000"), high: bn("555555555555555555555555556") },
+          {
+            low: bn("475000000000000000000000000"),
+            spot: bn("500000000000000000000000000"),
+            high: bn("555555555555555555555555556"),
+          },
           { low: bn("475000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
         newLimits: initialLimitsS1,
+      });
+    });
+
+    it("Step 1b: Ejection Phase with lastMinuteRemovals (initial folio, priceControl=true, prices=[1,1,1])", () => {
+      // Setup with lastMinuteRemovals: true
+      const { weights: weightsWithLastMinute, prices: pricesWithLastMinute, limits: limitsWithLastMinute } = getStartRebalance(
+        supply,
+        tokens,
+        initialFolioS1,
+        decimalsS1,
+        targetBasketS1,
+        initialMarketPricesS1,
+        priceErrorStartRebalanceS1,
+        true, // weightControl
+        true, // lastMinuteRemovals: true
+      );
+      
+      // Verify that lastMinuteRemovals set the low weights correctly
+      assert.equal(weightsWithLastMinute[0].low, 0n); // USDC target is 0, so low stays 0
+      assert.equal(weightsWithLastMinute[1].low, 1n); // DAI low should be 1
+      assert.equal(weightsWithLastMinute[2].low, 1n); // USDT low should be 1
+      
+      // Create mockRebalance with these weights
+      const mockRebalanceWithLastMinute: Rebalance = {
+        ...mockRebalanceBaseS1,
+        weights: weightsWithLastMinute,
+        initialPrices: pricesWithLastMinute,
+        limits: limitsWithLastMinute,
+        priceControl: PriceControl.PARTIAL,
+      };
+      
+      const [openAuctionArgs] = getOpenAuction(
+        mockRebalanceWithLastMinute,
+        supply,
+        initialFolioS1,
+        targetBasketS1,
+        initialFolioS1,
+        decimalsS1,
+        initialMarketPricesS1,
+        auctionPriceError,
+        finalStageAtForTest,
+      );
+      
+      // The getOpenAuction function will calculate ideal weights and then clamp them
+      // Since rebalance.weights[1].low = 1 and rebalance.weights[2].low = 1,
+      // the calculated low weights should be clamped to at least 1
+      assertOpenAuctionArgsEqual(openAuctionArgs, {
+        rebalanceNonce: 1n,
+        tokens: tokens,
+        newWeights: [
+          weightsWithLastMinute[0], // USDC: unchanged
+          {
+            low: bn("475000000000000000000000000"), // This will be clamped by rebalance.weights[1].low
+            spot: bn("500000000000000000000000000"),
+            high: bn("555555555555555555555555556"),
+          },
+          {
+            low: bn("475000000000000"), // This will be clamped by rebalance.weights[2].low
+            spot: bn("500000000000000"), 
+            high: bn("555555555555556"),
+          },
+        ],
+        newPrices: defaultExpectedPrices_USDC_DAI_USDT,
+        newLimits: limitsWithLastMinute,
       });
     });
 
@@ -195,7 +264,11 @@ describe("NATIVE DTFs", () => {
         tokens: tokens, // All tokens included because all have surpluses or deficits
         newWeights: [
           initialWeightsS1[0],
-          { low: bn("475000000000000000000000000"), spot: bn("500000000000000000000000000"), high: bn("555555555555555555555555556") },
+          {
+            low: bn("475000000000000000000000000"),
+            spot: bn("500000000000000000000000000"),
+            high: bn("555555555555555555555555556"),
+          },
           { low: bn("475000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
@@ -261,7 +334,11 @@ describe("NATIVE DTFs", () => {
         tokens: tokens, // All tokens have surpluses/deficits
         newWeights: [
           initialWeightsS1[0],
-          { low: bn("475000000000000000000000000"), spot: bn("500000000000000000000000000"), high: bn("555555555555555555555555556") },
+          {
+            low: bn("475000000000000000000000000"),
+            spot: bn("500000000000000000000000000"),
+            high: bn("555555555555555555555555556"),
+          },
           { low: bn("475000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") },
         ],
         newPrices: initialPricesS1, // from mockRebalance due to priceControl=false
@@ -377,7 +454,11 @@ describe("NATIVE DTFs", () => {
         tokens: ["DAI", "USDT"], // Only tokens with deficits
         newWeights: [
           // DAI: actual calculated values from debug output
-          { low: bn("475004750000000000000000000"), spot: bn("500005000000000000000000000"), high: bn("555555555555555555555555556") },
+          {
+            low: bn("475004750000000000000000000"),
+            spot: bn("500005000000000000000000000"),
+            high: bn("555555555555555555555555556"),
+          },
           // USDT: actual calculated values from debug output
           { low: bn("475004750000000"), spot: bn("500005000000000"), high: bn("555555555555556") },
         ],
@@ -415,6 +496,7 @@ describe("NATIVE DTFs", () => {
         initialMarketPricesS2,
         priceErrorStartRebalanceS2,
         true,
+        false, // lastMinuteRemovals
       );
       initialWeightsS2 = weights;
       initialPricesS2 = prices;
@@ -655,9 +737,7 @@ describe("NATIVE DTFs", () => {
       assertOpenAuctionArgsEqual(openAuctionArgs, {
         rebalanceNonce: 2n,
         tokens: ["USDC"], // Only USDC has deficit in this scenario
-        newWeights: [
-          { low: bn("900000000000000"), spot: bn("900000000000000"), high: bn("900000000000000") },
-        ],
+        newWeights: [{ low: bn("900000000000000"), spot: bn("900000000000000"), high: bn("900000000000000") }],
         newPrices: [defaultExpectedPrices_USDC_DAI_USDT[0]], // Only USDC price
         newLimits: initialLimitsS2,
       });
@@ -684,6 +764,7 @@ describe("NATIVE DTFs", () => {
       prices,
       priceError,
       true, // weightControl: true
+      false, // lastMinuteRemovals
     );
     assert.equal(newWeights.length, 2);
     assert.equal(newPricesResult.length, 2);
@@ -758,6 +839,7 @@ describe("NATIVE DTFs", () => {
         prices,
         priceError,
         true, // weightControl: true
+        false, // lastMinuteRemovals
       );
       assert.equal(newWeights.length, currentTokens.length);
       assert.equal(newPricesResult.length, currentTokens.length);
@@ -792,6 +874,7 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
     initialMarketPrices,
     priceErrorStartRebalance,
     false, // weightControl: false for TRACKING-style weights and limits
+    false, // lastMinuteRemovals
   );
 
   it("Step 0: Verifies initial setup from getStartRebalance (TRACKING)", () => {

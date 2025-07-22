@@ -582,15 +582,6 @@ export const getOpenAuction = (
   // {USD}
   const valueBeingTraded = surplusValue.gt(deficitValue) ? deficitValue : surplusValue;
 
-  // // completed if nothing to trade
-  // if (valueBeingTraded.eq(ZERO)) {
-  //   round = AuctionRound.FINAL;
-  //   rebalanceTarget = ONE;
-  //   relativeProgression = ONE;
-  //   progression = ONE;
-  // }
-  // // TODO maybe add back
-
   // ================================================================
 
   // filter tokens that are not in the rebalance
