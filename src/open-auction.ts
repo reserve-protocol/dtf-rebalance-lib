@@ -23,9 +23,9 @@ export enum AuctionRound {
  * @param auctionSize {USD} The total value on sale in the auction
  *
  * @param surplusTokens The list of tokens in surplus
- * @param surplusTokenSizes {USD} The USD size of the surplus for the token in the surplusTokens array
+ * @param surplusTokenSizes {USD} The USD size of the surplus token
  * @param deficitTokens The list of tokens in deficit
- * @param deficitTokenSizes {USD} The USD size of the deficit for the token in the deficitTokens array
+ * @param deficitTokenSizes {USD} The USD size of the deficit token
  */
 export interface AuctionMetrics {
   round: AuctionRound;
