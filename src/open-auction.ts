@@ -21,8 +21,11 @@ export enum AuctionRound {
  * @param target {1} The target of the auction on an absolute scale
  * @param relativeTarget {1} The relative target of the auction
  * @param auctionSize {USD} The total value on sale in the auction
+ *
  * @param surplusTokens The list of tokens in surplus
+ * @param surplusTokenSizes {USD} The USD size of the surplus for the token in the surplusTokens array
  * @param deficitTokens The list of tokens in deficit
+ * @param deficitTokenSizes {USD} The USD size of the deficit for the token in the deficitTokens array
  */
 export interface AuctionMetrics {
   round: AuctionRound;
@@ -32,8 +35,11 @@ export interface AuctionMetrics {
   target: number;
   relativeTarget: number;
   auctionSize: number;
+
   surplusTokens: string[];
+  surplusTokenSizes: number[];
   deficitTokens: string[];
+  deficitTokenSizes: number[];
 }
 
 // All the args needed to call `folio.openAuction()`
@@ -532,9 +538,6 @@ export const getOpenAuction = (
 
   // calculate metrics
 
-  const surplusTokens: string[] = [];
-  const deficitTokens: string[] = [];
-
   // update Decimal weightRanges
   // {wholeTok/wholeBU} = D27{tok/BU} * {BU/wholeBU} / {tok/wholeTok} / D27
   weightRanges = newWeights.map((range, i) => {
@@ -545,9 +548,16 @@ export const getOpenAuction = (
     };
   });
 
-  // {USD}
-  let surplusValue = ZERO;
-  let deficitValue = ZERO;
+  // basket
+  const auctionTokens: string[] = [];
+  const auctionWeights: WeightRange[] = []; // D27{tok/BU}
+  const auctionPrices: PriceRange[] = []; // D27{nanoUSD/tok}
+
+  // surpluses and deficits
+  const surplusTokens: string[] = [];
+  const surplusTokenSizes: number[] = []; // {USD}
+  const deficitTokens: string[] = [];
+  const deficitTokenSizes: number[] = []; // {USD}
 
   rebalance.tokens.forEach((token, i) => {
     if (!rebalance.inRebalance[i]) {
@@ -564,8 +574,12 @@ export const getOpenAuction = (
 
       // $1 minimum
       if (tokenDeficitValue.gte(ONE)) {
-        deficitValue = deficitValue.add(tokenDeficitValue);
+        auctionTokens.push(token);
+        auctionWeights.push(newWeights[i]);
+        auctionPrices.push(newPrices[i]);
+
         deficitTokens.push(token);
+        deficitTokenSizes.push(tokenDeficitValue.toNumber());
       }
     } else if (folio[i].gt(sellDownTo)) {
       // {USD} = {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
@@ -573,38 +587,26 @@ export const getOpenAuction = (
 
       // $1 minimum
       if (tokenSurplusValue.gte(ONE)) {
-        surplusValue = surplusValue.add(tokenSurplusValue);
+        auctionTokens.push(token);
+        auctionWeights.push(newWeights[i]);
+        auctionPrices.push(newPrices[i]);
+
         surplusTokens.push(token);
+        surplusTokenSizes.push(tokenSurplusValue.toNumber());
       }
     }
   });
 
-  // {USD}
-  const valueBeingTraded = surplusValue.gt(deficitValue) ? deficitValue : surplusValue;
-
-  // ================================================================
-
-  // filter tokens that are not in the rebalance
-  const returnTokens = [];
-  const returnWeights = [];
-  const returnPrices = [];
-  for (let i = 0; i < rebalance.tokens.length; i++) {
-    if (
-      rebalance.inRebalance[i] &&
-      (surplusTokens.includes(rebalance.tokens[i]) || deficitTokens.includes(rebalance.tokens[i]))
-    ) {
-      returnTokens.push(rebalance.tokens[i]);
-      returnWeights.push(newWeights[i]);
-      returnPrices.push(newPrices[i]);
-    }
-  }
+  const surplusSize = surplusTokenSizes.reduce((a, b) => a + b, 0);
+  const deficitSize = deficitTokenSizes.reduce((a, b) => a + b, 0);
+  const auctionSize = surplusSize > deficitSize ? deficitSize : surplusSize;
 
   return [
     {
       rebalanceNonce: rebalance.nonce,
-      tokens: returnTokens,
-      newWeights: returnWeights,
-      newPrices: returnPrices,
+      tokens: auctionTokens,
+      newWeights: auctionWeights,
+      newPrices: auctionPrices,
       newLimits: newLimits,
     },
     {
@@ -614,9 +616,11 @@ export const getOpenAuction = (
       relativeProgression: relativeProgression.toNumber(),
       target: rebalanceTarget.toNumber(),
       relativeTarget: relativeTarget.toNumber(),
-      auctionSize: valueBeingTraded.toNumber(),
+      auctionSize: auctionSize,
       surplusTokens: surplusTokens,
+      surplusTokenSizes: surplusTokenSizes,
       deficitTokens: deficitTokens,
+      deficitTokenSizes: deficitTokenSizes,
     },
   ];
 };
