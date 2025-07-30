@@ -341,15 +341,13 @@ export const getOpenAuction = (
   }
 
   // EJECT
-  // TODO maybe increase threshold to nonzero value, taking into account price
-  //      currently will get stuck trying to eject tiny dust over and over
-  if (portionBeingEjected.gt(0)) {
+  if (portionBeingEjected.gt(1e-5)) {
     round = AuctionRound.EJECT;
 
     // if the ejections are everything that's left, keep the finalStageAt targeting from above
     if (progression.add(portionBeingEjected).lt(ONE)) {
       // else: get rid of all the dust
-      let ejectionTarget = progression.add(portionBeingEjected.mul(1.05)); // buy 5% extra
+      let ejectionTarget = progression.add(portionBeingEjected.mul(1.1)); // buy up to 10% extra
       if (ejectionTarget.gt(ONE)) {
         ejectionTarget = ONE;
       }

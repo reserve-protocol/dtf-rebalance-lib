@@ -82,11 +82,11 @@ describe("NATIVE DTFs", () => {
     // Folio representing near completion for ejection tests: ~1% USDC, ~49.5% DAI, ~49.5% USDT by value
     const folioNearCompletionS1 = [bn("0.01e6"), bn("0.495e18"), bn("0.495e6")];
     // Folio for Step 6 (negligible ejection, high relative progression): USDC almost gone, DAI/USDT balanced
-    const folioTrueMidS1_ActuallyHighProg = [bn("0.00001e6"), bn("0.2e18"), bn("0.2e6")];
+    const folioTrueMidS1_ActuallyHighProg = [bn("0.00002e6"), bn("0.2e18"), bn("0.2e6")];
     // Folio for Step 7: shareValue ~1.0. USDC negligible. DAI 0.8 val, USDT 0.2 val.
     // InitialProg=0. Progression for this folio = (min(0.8,0.5)+min(0.2,0.5))/1.0 = (0.5+0.2)/1.0 = 0.7.
     // relativeProgression = 0.7 < 0.93 -> delta=0.05.
-    const folioStep7S1_varied_weights = [bn("0.00001e6"), bn("0.8e18"), bn("0.2e6")];
+    const folioStep7S1_varied_weights = [bn("0.00002e6"), bn("0.8e18"), bn("0.2e6")];
 
     let mockRebalanceBaseS1: Omit<Rebalance, "priceControl">;
     let initialWeightsS1: WeightRange[], initialPricesS1: PriceRange[], initialLimitsS1: RebalanceLimits;
@@ -489,7 +489,7 @@ describe("NATIVE DTFs", () => {
     // Folio for near completion ejection tests: ~98% USDC, ~1% DAI, ~1% USDT by value
     const folioTrulyNearCompletionS2 = [bn("0.98e6"), bn("0.01e18"), bn("0.01e6")];
     // Folio for Step 6 (negligible ejection, high relative progression): DAI/USDT almost gone
-    const folioTrueMidS2_ActuallyHighProg = [bn("0.4e6"), bn("0.00001e18"), bn("0.00001e6")];
+    const folioTrueMidS2_ActuallyHighProg = [bn("0.4e6"), bn("0.00002e18"), bn("0.00002e6")];
 
     let mockRebalanceBaseS2: Omit<Rebalance, "priceControl">;
     let initialWeightsS2: WeightRange[], initialPricesS2: PriceRange[], initialLimitsS2: RebalanceLimits;
