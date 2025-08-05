@@ -562,6 +562,10 @@ export const getOpenAuction = (
       return;
     }
 
+    auctionTokens.push(token);
+    auctionWeights.push(newWeights[i]);
+    auctionPrices.push(newPrices[i]);
+
     // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
     const buyUpTo = weightRanges[i].low.mul(actualLimits.low);
     const sellDownTo = weightRanges[i].high.mul(actualLimits.high);
@@ -572,10 +576,6 @@ export const getOpenAuction = (
 
       // $1 minimum
       if (tokenDeficitValue.gte(ONE)) {
-        auctionTokens.push(token);
-        auctionWeights.push(newWeights[i]);
-        auctionPrices.push(newPrices[i]);
-
         deficitTokens.push(token);
         deficitTokenSizes.push(tokenDeficitValue.toNumber());
       }
@@ -585,10 +585,6 @@ export const getOpenAuction = (
 
       // $1 minimum
       if (tokenSurplusValue.gte(ONE)) {
-        auctionTokens.push(token);
-        auctionWeights.push(newWeights[i]);
-        auctionPrices.push(newPrices[i]);
-
         surplusTokens.push(token);
         surplusTokenSizes.push(tokenSurplusValue.toNumber());
       }
