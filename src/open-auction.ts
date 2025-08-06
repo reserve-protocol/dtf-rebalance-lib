@@ -136,6 +136,7 @@ export const getOpenAuction = (
       "getOpenAuction",
       rebalance,
       _supply,
+      _initialSupply,
       _initialAssets,
       _targetBasket,
       _assets,
