@@ -57,7 +57,7 @@ const assertOpenAuctionArgsEqual = (a: OpenAuctionArgs, b: OpenAuctionArgs, prec
 };
 
 describe("NATIVE DTFs", () => {
-  const supply = bn("1e21"); // 1000 supply
+  const supply = bn("1e18"); // 1 supply
   const auctionPriceError = [0.01, 0.01, 0.01]; // Smaller price error for getOpenAuction
   const finalStageAtForTest = 0.95; // Standard finalStageAt
 
@@ -180,7 +180,11 @@ describe("NATIVE DTFs", () => {
 
     it("Step 1b: Ejection Phase with deferWeights (initial folio, priceControl=true, prices=[1,1,1])", () => {
       // Setup with deferWeights: true
-      const { weights: weightsDeferred, prices: pricesDeferred, limits: limitsDeferred } = getStartRebalance(
+      const {
+        weights: weightsDeferred,
+        prices: pricesDeferred,
+        limits: limitsDeferred,
+      } = getStartRebalance(
         supply,
         tokens,
         initialFolioS1,
@@ -191,7 +195,7 @@ describe("NATIVE DTFs", () => {
         true, // weightControl
         true, // deferWeights: true
       );
-      
+
       // Verify that deferWeights set the weights and limits correctly
       assert.equal(weightsDeferred[0].low, 0n); // USDC target is 0, so low stays 0
       assert.equal(weightsDeferred[0].high, 0n); // USDC target is 0, so high stays 0
@@ -199,12 +203,12 @@ describe("NATIVE DTFs", () => {
       assert.equal(weightsDeferred[1].high, bn("1e54")); // DAI high should be 1e54 (D27n * D27n)
       assert.equal(weightsDeferred[2].low, 1n); // USDT low should be 1
       assert.equal(weightsDeferred[2].high, bn("1e54")); // USDT high should be 1e54
-      
+
       // Verify limits are set correctly (with weightControl=true, limits are fixed at 1e18)
       assert.equal(limitsDeferred.low, bn("1e18")); // Low limit should be 1e18
       assert.equal(limitsDeferred.spot, bn("1e18")); // Spot limit unchanged
       assert.equal(limitsDeferred.high, bn("1e18")); // High limit should be 1e18
-      
+
       // Create mockRebalance with these weights
       const mockRebalanceDeferred: Rebalance = {
         ...mockRebalanceBaseS1,
@@ -213,7 +217,7 @@ describe("NATIVE DTFs", () => {
         limits: limitsDeferred,
         priceControl: PriceControl.PARTIAL,
       };
-      
+
       const [openAuctionArgs] = getOpenAuction(
         mockRebalanceDeferred,
         supply,
@@ -225,7 +229,7 @@ describe("NATIVE DTFs", () => {
         auctionPriceError,
         finalStageAtForTest,
       );
-      
+
       // The getOpenAuction function will calculate ideal weights and then clamp them
       // With deferWeights, the weight ranges are extremely wide
       // Since this is an ejection phase, high weights get +10%
@@ -241,7 +245,7 @@ describe("NATIVE DTFs", () => {
           },
           {
             low: bn("475000000000000"), // Calculated value, clamped between 1 and 1e54
-            spot: bn("500000000000000"), 
+            spot: bn("500000000000000"),
             high: bn("577500000000000"), // 525e12 * 1.1 for ejection = 577.5e12
           },
         ],
@@ -863,7 +867,7 @@ describe("NATIVE DTFs", () => {
 });
 
 describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
-  const supply = bn("1e21"); // 1000 supply
+  const supply = bn("1e18"); // 1 supply
   const tokens = ["USDC", "DAI", "USDT"];
   const decimals = [bn("6"), bn("18"), bn("6")];
   const initialMarketPrices = [1, 1, 1];
@@ -1106,7 +1110,7 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
 });
 
 describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", () => {
-  const supply = bn("1e21");
+  const supply = bn("1e18");
   const tokens = ["USDC", "DAI", "USDT"];
   const decimals = [bn("6"), bn("18"), bn("6")];
   const auctionPriceErrorSmall = [0.01, 0.01, 0.01];
@@ -1379,14 +1383,14 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
     assert.equal(openAuctionArgs.tokens.length, 3);
     assert.equal(openAuctionArgs.newWeights.length, 3);
     assert.equal(openAuctionArgs.newPrices.length, 3);
-    
+
     // Verify all tokens are included
     assert.deepEqual(openAuctionArgs.tokens, ["USDC", "DAI", "USDT"]);
   });
 });
 
 describe("Price Edge Cases in getOpenAuction", () => {
-  const supply = bn("1e21");
+  const supply = bn("1e18");
   const tokens = ["USDC", "DAI"];
   const decimals = [bn("6"), bn("18")];
   const auctionPriceErrorSmall = [0.01, 0.01];

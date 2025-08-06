@@ -22,7 +22,7 @@ export interface StartRebalanceArgsPartial {
  *
  * @param _supply {share}
  * @param tokens Addresses of tokens in the basket
- * @param _folio D18{tok/share} Folio of the basket
+ * @param _assets {tok} Folio asset assets
  * @param decimals Decimals of each token
  * @param _targetBasket D18{1} Ideal basket
  * @param _prices {USD/wholeTok} USD prices for each *whole* token
@@ -34,7 +34,7 @@ export interface StartRebalanceArgsPartial {
 export const getStartRebalance = (
   _supply: bigint,
   tokens: string[],
-  _folio: bigint[],
+  _assets: bigint[],
   decimals: bigint[],
   _targetBasket: bigint[],
   _prices: number[],
@@ -48,7 +48,7 @@ export const getStartRebalance = (
       "getStartRebalance",
       _supply,
       tokens,
-      _folio,
+      _assets,
       decimals,
       _targetBasket,
       _prices,
@@ -62,8 +62,11 @@ export const getStartRebalance = (
     throw new Error("deferWeights is not supported for tracking DTFs");
   }
 
-  // {wholeTok/wholeShare} = D18{tok/share} * {share/wholeShare} / {tok/wholeTok} / D18
-  const folio = _folio.map((c: bigint, i: number) => new Decimal(c.toString()).div(new Decimal(`1e${decimals[i]}`)));
+  // {wholeShare} = {share} / {share/wholeShare}
+  const supply = new Decimal(_supply.toString()).div(D18d);
+
+  // {wholeTok} = {tok} * {share/wholeShare} / {tok/wholeTok} / D18
+  const assets = _assets.map((c: bigint, i: number) => new Decimal(c.toString()).div(new Decimal(`1e${decimals[i]}`)));
 
   // convert price number inputs to bigints
 
@@ -93,13 +96,13 @@ export const getStartRebalance = (
 
     // === newWeights ===
 
-    // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
-    const dtfPrice = folio
+    // {USD} = {wholeTok} * {USD/wholeTok}
+    const dtfValue = assets
       .map((f: DecimalType, i: number) => f.mul(prices[i]))
       .reduce((a: DecimalType, b: DecimalType) => a.add(b));
 
-    // {wholeTok/wholeShare} = {1} * {USD/wholeShare} / {USD/wholeTok}
-    const spotWeight = targetBasket[i].mul(dtfPrice).div(prices[i]);
+    // {wholeTok/wholeShare} = {1} * {USD} / {USD/wholeTok} / {wholeShare}
+    const spotWeight = targetBasket[i].mul(dtfValue).div(prices[i]).div(supply);
 
     // D27{tok/share}{wholeShare/wholeTok} = D27 * {tok/wholeTok} / {share/wholeShare}
     const limitMultiplier = D27d.mul(new Decimal(`1e${decimals[i]}`)).div(D18d);

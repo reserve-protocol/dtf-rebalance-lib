@@ -105,9 +105,9 @@ export const getTargetBasket = (
  *
  * @param rebalance The result of calling folio.getRebalance(), today
  * @param _supply {share} The totalSupply() of the basket, today
- * @param _initialFolio D18{tok/share} Initial balances per share, e.g result of folio.toAssets(1e18, 0) at time rebalance was first proposed
+ * @param _initialAssets {tok} Initial asset balances in the Folio, e.g result of folio.totalAssets() at time rebalance was first proposed
  * @param _targetBasket D18{1} Result of calling `getTargetBasket()`
- * @param _folio D18{tok/share} Current ratio of token per share, e.g result of folio.toAssets(1e18, 0), today
+ * @param _assets {tok} Current asset balances in the Folio, e.g result of folio.totalAssets(), today
  * @param _decimals Decimals of each token
  * @param _prices {USD/wholeTok} USD prices for each *whole* token, today
  * @param _priceError {1} Price error to use for each token during auction pricing; should be smaller than price error during startRebalance
@@ -116,9 +116,9 @@ export const getTargetBasket = (
 export const getOpenAuction = (
   rebalance: Rebalance,
   _supply: bigint,
-  _initialFolio: bigint[] = [],
+  _initialAssets: bigint[] = [],
   _targetBasket: bigint[] = [],
-  _folio: bigint[],
+  _assets: bigint[],
   _decimals: bigint[],
   _prices: number[],
   _priceError: number[],
@@ -134,9 +134,9 @@ export const getOpenAuction = (
       "getOpenAuction",
       rebalance,
       _supply,
-      _initialFolio,
+      _initialAssets,
       _targetBasket,
-      _folio,
+      _assets,
       _decimals,
       _prices,
       _priceError,
@@ -146,8 +146,8 @@ export const getOpenAuction = (
 
   if (
     rebalance.tokens.length != _targetBasket.length ||
-    _targetBasket.length != _folio.length ||
-    _folio.length != _decimals.length ||
+    _targetBasket.length != _assets.length ||
+    _assets.length != _decimals.length ||
     _decimals.length != _prices.length ||
     _prices.length != _priceError.length
   ) {
@@ -180,11 +180,13 @@ export const getOpenAuction = (
   // {tok/wholeTok}
   const decimalScale = _decimals.map((a) => new Decimal(`1e${a}`));
 
-  // {wholeTok/wholeShare} = D18{tok/share} * {share/wholeShare} / {tok/wholeTok} / D18
-  const initialFolio = _initialFolio.map((c: bigint, i: number) => new Decimal(c.toString()).div(decimalScale[i]));
+  // {wholeTok} = {tok} / {tok/wholeTok}
+  const initialAssets = _initialAssets.map((bal: bigint, i: number) =>
+    new Decimal(bal.toString()).div(decimalScale[i]),
+  );
 
-  // {wholeTok/wholeShare} = D18{tok/share} * {share/wholeShare} / {tok/wholeTok} / D18
-  const folio = _folio.map((c: bigint, i: number) => new Decimal(c.toString()).div(decimalScale[i]));
+  // {wholeTok} = {tok} / {tok/wholeTok}
+  const assets = _assets.map((bal: bigint, i: number) => new Decimal(bal.toString()).div(decimalScale[i]));
 
   // {wholeTok/wholeBU} = D27{tok/BU} * {BU/wholeBU} / {tok/wholeTok} / D27
   let weightRanges = rebalance.weights.map((range: WeightRange, i: number) => {
@@ -199,40 +201,43 @@ export const getOpenAuction = (
 
   // ================================================================
 
-  // calculate ideal spot limit, the actual BU<->share ratio
+  // calculate ideal spot limit, the actual basket<->share ratio
 
-  // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
-  const shareValue = folio
+  // {USD}
+  const folioValue = assets
     .map((f: DecimalType, i: number) => {
       if (!rebalance.inRebalance[i]) {
         return ZERO;
       }
 
+      // {USD} = {wholeTok} * {USD/wholeTok}
       return f.mul(prices[i]);
     })
     .reduce((a, b) => a.add(b));
 
-  // {USD/wholeBU} = {wholeTok/wholeBU} * {USD/wholeTok}
-  const buValue = weightRanges
+  // {USD}
+  const basketValue = weightRanges
     .map((weightRange, i) => {
       if (!rebalance.inRebalance[i]) {
         return ZERO;
       }
 
-      return weightRange.spot.mul(prices[i]);
+      // {USD} = {wholeTok/wholeBU} * {USD/wholeTok} * {wholeBU}
+      // assume basket and share are the same
+      return weightRange.spot.mul(prices[i]).mul(supply);
     })
     .reduce((a, b) => a.add(b));
 
-  const buPriceChange = buValue.sub(shareValue).div(shareValue);
-  console.log(`      🧺  ${buPriceChange.mul(100).toFixed(2)}% basket price difference`);
+  const basketPriceChange = basketValue.sub(folioValue).div(folioValue);
+  console.log(`      🧺  ${basketPriceChange.mul(100).toFixed(2)}% basket price difference`);
 
   if (debug) {
-    console.log("shareValue", shareValue.toString());
-    console.log("buValue", buValue.toString());
+    console.log("folioValue", folioValue.toString());
+    console.log("basketValue", basketValue.toString());
   }
 
-  if (buValue.div(shareValue).gt(10) || shareValue.div(buValue).gt(10)) {
-    throw new Error("buValue and shareValue are too different, something probably went wrong");
+  if (basketValue.div(folioValue).gt(10) || folioValue.div(basketValue).gt(10)) {
+    throw new Error("basketValue and folioValue are too different, something probably went wrong");
   }
 
   // ================================================================
@@ -246,61 +251,61 @@ export const getOpenAuction = (
     }
   }
 
-  // {1} = {wholeTok/wholeShare} * {USD/wholeTok} / {USD/wholeShare}
+  // {1}
   const portionBeingEjected = ejectionIndices
-    .map((i) => {
-      return folio[i].mul(prices[i]);
-    })
+    // {USD} = {wholeTok} * {USD/wholeTok}
+    .map((i) => assets[i].mul(prices[i]))
     .reduce((a, b) => a.add(b), ZERO)
-    .div(shareValue);
+    .div(folioValue);
 
   // ================================================================
 
   // calculate progressions
 
-  // {wholeBU/wholeShare} = {USD/wholeShare} / {USD/wholeBU}
-  const spotLimit = shareValue.div(buValue);
+  // {1} = {USD} / {USD}
+  const idealSpotLimit = folioValue.div(basketValue);
 
   // {wholeBU/wholeShare} = D18{BU/share} / D18
   const prevSpotLimit = new Decimal(rebalance.limits.spot.toString()).div(D18d);
-  const maxSpotLimit = spotLimit.gt(prevSpotLimit) ? spotLimit : prevSpotLimit;
+  const maxSpotLimit = idealSpotLimit.gt(prevSpotLimit) ? idealSpotLimit : prevSpotLimit;
+  // known: units a little weird here, combining {1} and {wholeBU/wholeShare}
 
-  // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
-  const expectedBalances = weightRanges.map((weightRange) => weightRange.spot.mul(maxSpotLimit));
+  // {wholeTok} = {wholeTok/wholeBU} * {wholeBU/wholeShare} * {wholeShare}
+  const expectedBalances = weightRanges.map((weightRange) => weightRange.spot.mul(maxSpotLimit).mul(supply));
 
   // absolute scale
-  // {1} = {USD/wholeShare} / {USD/wholeShare}
-  let progression = folio
+  // {1}
+  let progression = assets
     .map((actualBalance, i) => {
       if (!rebalance.inRebalance[i]) {
         return ZERO;
       }
 
-      // {wholeTok/wholeShare}
+      // {wholeTok}
       const balanceInBasket = expectedBalances[i].gt(actualBalance) ? actualBalance : expectedBalances[i];
 
-      // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
+      // {USD} = {wholeTok} * {USD/wholeTok}
       return balanceInBasket.mul(prices[i]);
     })
     .reduce((a, b) => a.add(b))
-    .div(shareValue);
+    .div(folioValue);
 
   // absolute scale
-  // {1} = {USD/wholeShare} / {USD/wholeShare}
-  const initialProgression = initialFolio
+  // {1}
+  const initialProgression = initialAssets
     .map((initialBalance, i) => {
       if (!rebalance.inRebalance[i]) {
         return ZERO;
       }
 
-      // {wholeTok/wholeShare}
+      // {wholeTok}
       const balanceInBasket = expectedBalances[i].gt(initialBalance) ? initialBalance : expectedBalances[i];
 
-      // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
+      // {USD} = {wholeTok} * {USD/wholeTok}
       return balanceInBasket.mul(prices[i]);
     })
     .reduce((a, b) => a.add(b))
-    .div(shareValue);
+    .div(folioValue);
 
   if (progression < initialProgression) {
     if (debug) {
@@ -377,11 +382,12 @@ export const getOpenAuction = (
 
   // get new limits, constrained by extremes
 
-  // D18{BU/share} = {wholeBU/wholeShare} * D18 * {1}
+  // D18{BU/share}
   const newLimits = {
-    low: bn(spotLimit.sub(spotLimit.mul(delta)).mul(D18d)),
-    spot: bn(spotLimit.mul(D18d)),
-    high: bn(spotLimit.add(spotLimit.mul(delta)).mul(D18d)),
+    // D18{BU/share} = {wholeBU/wholeShare} * {1} * D18
+    low: bn(idealSpotLimit.sub(idealSpotLimit.mul(delta)).mul(D18d)),
+    spot: bn(idealSpotLimit.mul(D18d)),
+    high: bn(idealSpotLimit.add(idealSpotLimit.mul(delta)).mul(D18d)),
   };
 
   // hold some surpluses aside if ejecting
@@ -421,8 +427,9 @@ export const getOpenAuction = (
 
   // get new weights, constrained by extremes
 
-  // {wholeBU/wholeShare} = D18{BU/share} / D18
+  // {wholeBU/wholeShare}
   const actualLimits = {
+    // {wholeBU/wholeShare} = D18{BU/share} / D18
     low: new Decimal(newLimits.low.toString()).div(D18d),
     spot: new Decimal(newLimits.spot.toString()).div(D18d),
     high: new Decimal(newLimits.high.toString()).div(D18d),
@@ -430,11 +437,12 @@ export const getOpenAuction = (
 
   // D27{tok/BU}
   const newWeights = rebalance.weights.map((weightRange, i) => {
-    // {wholeTok/wholeBU} = {USD/wholeShare} * {1} / {wholeBU/wholeShare} / {USD/wholeTok}
-    const idealWeight = shareValue.mul(targetBasket[i]).div(actualLimits.spot).div(prices[i]);
+    // {wholeTok/wholeBU} = {USD} / {wholeShare} * {1} / {wholeBU/wholeShare} / {USD/wholeTok}
+    const idealWeight = folioValue.div(supply).mul(targetBasket[i]).div(actualLimits.spot).div(prices[i]);
 
-    // D27{tok/BU} = {wholeTok/wholeBU} * D27 * {tok/wholeTok} / {BU/wholeBU}
+    // D27{tok/BU}
     const newWeightsD27 = {
+      // D27{tok/BU} = {wholeTok/wholeBU} * D27 * {tok/wholeTok} / {BU/wholeBU}
       low: bn(
         idealWeight
           .mul(ONE.sub(delta).div(actualLimits.low.div(actualLimits.spot))) // add remaining delta into weight
@@ -499,8 +507,9 @@ export const getOpenAuction = (
       return initialPrice;
     }
 
-    // D27{nanoUSD/tok} = {USD/wholeTok} * {nanoUSD/USD} / {tok/wholeTok} * D27
+    // D27{nanoUSD/tok}
     const pricesD27 = {
+      // D27{nanoUSD/tok} = {USD/wholeTok} * {nanoUSD/USD} / {tok/wholeTok} * D27
       low: bn(prices[i].mul(ONE.sub(priceError[i])).mul(D9d).div(decimalScale[i]).mul(D27d)),
       high: bn(prices[i].div(ONE.sub(priceError[i])).mul(D9d).div(decimalScale[i]).mul(D27d)),
     };
@@ -566,22 +575,22 @@ export const getOpenAuction = (
     auctionWeights.push(newWeights[i]);
     auctionPrices.push(newPrices[i]);
 
-    // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
-    const buyUpTo = weightRanges[i].low.mul(actualLimits.low);
-    const sellDownTo = weightRanges[i].high.mul(actualLimits.high);
+    // {wholeTok} = {wholeTok/wholeBU} * {wholeBU/wholeShare} * {wholeShare}
+    const buyUpTo = weightRanges[i].low.mul(actualLimits.low).mul(supply);
+    const sellDownTo = weightRanges[i].high.mul(actualLimits.high).mul(supply);
 
-    if (folio[i].lt(buyUpTo)) {
-      // {USD} = {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
-      const tokenDeficitValue = buyUpTo.sub(folio[i]).mul(prices[i]).mul(supply);
+    if (assets[i].lt(buyUpTo)) {
+      // {USD} = {wholeTok} * {USD/wholeTok}
+      const tokenDeficitValue = buyUpTo.sub(assets[i]).mul(prices[i]);
 
       // $1 minimum
       if (tokenDeficitValue.gte(ONE)) {
         deficitTokens.push(token);
         deficitTokenSizes.push(tokenDeficitValue.toNumber());
       }
-    } else if (folio[i].gt(sellDownTo)) {
-      // {USD} = {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
-      const tokenSurplusValue = folio[i].sub(sellDownTo).mul(prices[i]).mul(supply);
+    } else if (assets[i].gt(sellDownTo)) {
+      // {USD} = {wholeTok} * {USD/wholeTok}
+      const tokenSurplusValue = assets[i].sub(sellDownTo).mul(prices[i]);
 
       // $1 minimum
       if (tokenSurplusValue.gte(ONE)) {

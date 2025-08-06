@@ -50,7 +50,7 @@ for (const folioConfig of FOLIO_CONFIGS) {
 
     before(async function () {
       // Get initial tokens and their decimals once
-      const [tokens] = await folio.toAssets(10n ** 18n, 0);
+      const [tokens] = await folio.totalAssets();
       orderedTokens = [...tokens];
 
       for (const token of orderedTokens) {
@@ -67,7 +67,7 @@ for (const folioConfig of FOLIO_CONFIGS) {
 
         const pricesRec = await getAssetPrices(orderedTokens, folioConfig.chainId, await time.latest());
 
-        const [initialTokens, initialAmounts] = await folio.toAssets(10n ** 18n, 0);
+        const [initialTokens, initialAmounts] = await folio.totalAssets();
 
         const initialAmountsRec: Record<string, bigint> = {};
         orderedTokens.forEach((token: string) => {
@@ -125,12 +125,12 @@ for (const folioConfig of FOLIO_CONFIGS) {
         // only used for NATIVE (weightControl=true)
         const finalPricesRec = await getAssetPrices(orderedTokens, folioConfig.chainId, await time.latest());
 
-        const [finalTokens, amountsAfterFinal] = await folio.toAssets(10n ** 18n, 0);
+        const [finalTokens, balancesAfterFinal] = await folio.totalAssets();
 
-        const amountsAfterFinalRec: Record<string, bigint> = {};
+        const balancesAfterFinalRec: Record<string, bigint> = {};
         orderedTokens.forEach((token: string) => {
           const idx = finalTokens.indexOf(token);
-          amountsAfterFinalRec[token] = idx >= 0 ? amountsAfterFinal[idx] : 0n;
+          balancesAfterFinalRec[token] = idx >= 0 ? balancesAfterFinal[idx] : 0n;
         });
 
         const [weightControl] = await folio.rebalanceControl();
@@ -140,10 +140,10 @@ for (const folioConfig of FOLIO_CONFIGS) {
         const finalTokenValuesRec: Record<string, number> = {};
         orderedTokens.forEach((token: string) => {
           const price = weightControl ? finalPricesRec[token].snapshotPrice : pricesRec[token].snapshotPrice;
-          const amount = amountsAfterFinalRec[token];
+          const bal = balancesAfterFinalRec[token];
           const decimal = decimalsRec[token];
 
-          finalTokenValuesRec[token] = (price * Number(amount)) / Number(10n ** decimal);
+          finalTokenValuesRec[token] = (price * Number(bal)) / Number(10n ** decimal);
           totalValueAfterFinal += finalTokenValuesRec[token];
         });
 

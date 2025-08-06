@@ -19,8 +19,7 @@ for (const folioConfig of FOLIO_CONFIGS) {
       const { admin, folio, folioLensTyped, bidder, rebalanceManager, auctionLauncher } =
         await loadFixture(deployFixture);
 
-      const supply = await folio.totalSupply();
-      const [basket, rawAmounts] = await folio.toAssets(10n ** 18n, 0);
+      const [basket, rawBalances] = await folio.totalAssets();
       const tokens = [...basket];
 
       const decimals = await Promise.all(
@@ -29,8 +28,8 @@ for (const folioConfig of FOLIO_CONFIGS) {
 
       const prices = await getAssetPrices(tokens, folioConfig.chainId, await time.latest());
 
-      const basketValues = rawAmounts.map(
-        (amount: bigint, i: number) => (prices[tokens[i]].snapshotPrice * Number(amount)) / Number(10n ** decimals[i]),
+      const basketValues = rawBalances.map(
+        (bal: bigint, i: number) => (prices[tokens[i]].snapshotPrice * Number(bal)) / Number(10n ** decimals[i]),
       );
       const totalBasketValue = basketValues.reduce((a: number, b: number) => a + b, 0);
       const targetBasketRatios = basketValues.map((value: number) => value / totalBasketValue);
@@ -38,9 +37,9 @@ for (const folioConfig of FOLIO_CONFIGS) {
         bn((weight * 10 ** 18).toString()),
       );
 
-      const initialAmountsAsRecord: Record<string, bigint> = {};
-      rawAmounts.forEach((amount: bigint, i: number) => {
-        initialAmountsAsRecord[tokens[i]] = amount;
+      const initialBalancesAsRecord: Record<string, bigint> = {};
+      rawBalances.forEach((bal: bigint, i: number) => {
+        initialBalancesAsRecord[tokens[i]] = bal;
       });
 
       let targetWeightsAsRecord: Record<string, bigint> = {};
@@ -51,7 +50,7 @@ for (const folioConfig of FOLIO_CONFIGS) {
       if (tokens.length > 0 && targetBasketBigIntWeights.length > 0) {
         const { symbol: ejectedSymbol } = await getTokenNameAndSymbol(tokens[0]);
         console.log(
-          `💨 ejecting ${ejectedSymbol} $${((totalBasketValue * Number(supply) * targetBasketRatios[0]) / 10 ** 18).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${(Number(targetBasketBigIntWeights[0]) / 10 ** 18).toLocaleString("en-US", { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
+          `💨 ejecting ${ejectedSymbol} $${(totalBasketValue * targetBasketRatios[0]).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${(Number(targetBasketBigIntWeights[0]) / 10 ** 18).toLocaleString("en-US", { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
         );
         const complement =
           targetBasketBigIntWeights.reduce((a: bigint, b: bigint) => a + b, 0n) - targetBasketBigIntWeights[0];
@@ -85,7 +84,7 @@ for (const folioConfig of FOLIO_CONFIGS) {
         { folio, folioLensTyped },
         { bidder, rebalanceManager, auctionLauncher, admin },
         tokens,
-        initialAmountsAsRecord,
+        initialBalancesAsRecord,
         targetWeightsAsRecord,
         prices,
         0.95,
