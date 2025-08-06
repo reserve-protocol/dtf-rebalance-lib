@@ -20,9 +20,9 @@ export interface StartRebalanceArgsPartial {
  *
  * The `tokens` argument should be paired with the two return values and passed to `startRebalance()`
  *
- * @param _supply {share}
+ * @param _supply {share} Current total supply
  * @param tokens Addresses of tokens in the basket
- * @param _assets {tok} Folio asset assets
+ * @param _assets {tok} Current asset balances
  * @param decimals Decimals of each token
  * @param _targetBasket D18{1} Ideal basket
  * @param _prices {USD/wholeTok} USD prices for each *whole* token

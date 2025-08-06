@@ -212,6 +212,7 @@ export async function runRebalance(
         priceControl: rebalanceState.priceControl,
       },
       supply,
+      supply,
       initialBalsArray,
       auctionTargetBasket,
       bals,

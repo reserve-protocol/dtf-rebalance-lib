@@ -152,6 +152,7 @@ describe("NATIVE DTFs", () => {
       const [openAuctionArgs] = getOpenAuction(
         mockRebalance,
         supply,
+        supply,
         initialFolioS1,
         targetBasketS1,
         initialFolioS1,
@@ -221,6 +222,7 @@ describe("NATIVE DTFs", () => {
       const [openAuctionArgs] = getOpenAuction(
         mockRebalanceDeferred,
         supply,
+        supply,
         initialFolioS1,
         targetBasketS1,
         initialFolioS1,
@@ -262,6 +264,7 @@ describe("NATIVE DTFs", () => {
       const [openAuctionArgs] = getOpenAuction(
         mockRebalance,
         supply,
+        supply,
         initialFolioS1,
         targetBasketS1,
         folioMidProgressS1,
@@ -295,6 +298,7 @@ describe("NATIVE DTFs", () => {
       };
       const [openAuctionArgs] = getOpenAuction(
         mockRebalance,
+        supply,
         supply,
         initialFolioS1,
         targetBasketS1,
@@ -333,6 +337,7 @@ describe("NATIVE DTFs", () => {
       const [openAuctionArgs] = getOpenAuction(
         mockRebalance,
         supply,
+        supply,
         initialFolioS1,
         targetBasketS1,
         initialFolioS1,
@@ -366,6 +371,7 @@ describe("NATIVE DTFs", () => {
       const pricesS1_loss = [0.9, 1, 1];
       const [openAuctionArgs] = getOpenAuction(
         mockRebalance,
+        supply,
         supply,
         initialFolioS1,
         targetBasketS1,
@@ -412,6 +418,7 @@ describe("NATIVE DTFs", () => {
       const [openAuctionArgs] = getOpenAuction(
         mockRebalance,
         supply,
+        supply,
         initialFolioS1,
         targetBasketS1,
         folioTrueMidS1_ActuallyHighProg,
@@ -453,6 +460,7 @@ describe("NATIVE DTFs", () => {
       // This ideal_spot is same as initialWeightsS1[i].spot_whole.
       const [openAuctionArgs] = getOpenAuction(
         mockRebalance,
+        supply,
         supply,
         initialFolioS1,
         targetBasketS1,
@@ -561,6 +569,7 @@ describe("NATIVE DTFs", () => {
       const [openAuctionArgs] = getOpenAuction(
         mockRebalance,
         supply,
+        supply,
         initialFolioS2,
         targetBasketS2,
         initialFolioS2,
@@ -590,6 +599,7 @@ describe("NATIVE DTFs", () => {
       const [openAuctionArgs] = getOpenAuction(
         mockRebalance,
         supply,
+        supply,
         initialFolioS2,
         targetBasketS2,
         folioMidProgressS2,
@@ -618,6 +628,7 @@ describe("NATIVE DTFs", () => {
       };
       const [openAuctionArgs] = getOpenAuction(
         mockRebalance,
+        supply,
         supply,
         initialFolioS2,
         targetBasketS2,
@@ -652,6 +663,7 @@ describe("NATIVE DTFs", () => {
       const pricesS2_USDCdrop = [0.9, 1, 1]; // USDC price drops, good for us as we target USDC
       const [openAuctionArgs] = getOpenAuction(
         mockRebalance,
+        supply,
         supply,
         initialFolioS2,
         targetBasketS2,
@@ -698,6 +710,7 @@ describe("NATIVE DTFs", () => {
       const [openAuctionArgs] = getOpenAuction(
         mockRebalance,
         supply,
+        supply,
         initialFolioS2,
         targetBasketS2,
         initialFolioS2,
@@ -739,6 +752,7 @@ describe("NATIVE DTFs", () => {
       };
       const [openAuctionArgs] = getOpenAuction(
         mockRebalance,
+        supply,
         supply,
         initialFolioS2,
         targetBasketS2,
@@ -960,6 +974,7 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
     const [openAuctionArgs1] = getOpenAuction(
       mockRebalance1,
       supply,
+      supply,
       _folioUSDCStart, // _initialFolio
       targetBasketUSDCtoDAIUST,
       _folio1, // current _folio
@@ -1013,6 +1028,7 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
 
     const [openAuctionArgs2] = getOpenAuction(
       mockRebalance2,
+      supply,
       supply,
       _folioUSDCStart, // _initialFolio
       targetBasketUSDCtoDAIUST,
@@ -1068,6 +1084,7 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
 
     const [openAuctionArgs3] = getOpenAuction(
       mockRebalance3,
+      supply,
       supply,
       _folioUSDCStart, // _initialFolio
       targetBasketUSDCtoDAIUST,
@@ -1161,6 +1178,7 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
     const [openAuctionArgs] = getOpenAuction(
       mockRebalanceHybrid,
       supply,
+      supply,
       _initialFolioHybridStart,
       targetBasketHybrid,
       _folio,
@@ -1197,6 +1215,7 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
     };
     const [openAuctionArgs] = getOpenAuction(
       mockRebalanceHybrid,
+      supply,
       supply,
       _initialFolioHybridStart,
       targetBasketHybrid,
@@ -1235,6 +1254,7 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
     const [openAuctionArgsCustomRound1] = getOpenAuction(
       mockRebalanceHybridCustom,
       supply,
+      supply,
       _initialFolioHybridStart, // Use true initial folio
       targetBasketHybrid,
       _folioRound1,
@@ -1267,6 +1287,7 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
     const _folioRound2 = [bn("0"), bn("4e17"), bn("6e5")]; // Current: 0 USDC, 0.4 DAI val, 0.6 USDT val
     const [openAuctionArgsCustomRound2] = getOpenAuction(
       mockRebalanceHybridCustom,
+      supply,
       supply,
       _initialFolioHybridStart,
       targetBasketHybrid,
@@ -1310,6 +1331,7 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
     };
     const [openAuctionArgs] = getOpenAuction(
       mockRebalanceHybrid4,
+      supply,
       supply,
       _initialFolioHybridStart,
       targetBasketHybrid,
@@ -1362,6 +1384,7 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
     };
     const [openAuctionArgs] = getOpenAuction(
       mockRebalanceHybrid5,
+      supply,
       supply,
       _initialFolioHybridStart,
       targetBasketHybrid,
@@ -1431,6 +1454,7 @@ describe("Price Edge Cases in getOpenAuction", () => {
         getOpenAuction(
           mockRebalanceEdge,
           supply,
+          supply,
           folioSimple, // _initialFolio
           targetBasketSimple,
           folioSimple, // current _folio
@@ -1481,6 +1505,7 @@ describe("Price Edge Cases in getOpenAuction", () => {
       () => {
         getOpenAuction(
           mockRebalanceEdge,
+          supply,
           supply,
           folioSimple, // _initialFolio
           targetBasketSimple,
