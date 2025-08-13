@@ -1,7 +1,7 @@
 import { Decimal } from "./utils";
 import type { Decimal as DecimalType } from "decimal.js-light";
 
-import { bn, D9d, D18d, D27d, ONE, ZERO } from "./numbers";
+import { bn, D9d, D18d, D27d, ONE, ZERO, D18n, D27n } from "./numbers";
 
 import { PriceControl, PriceRange, Rebalance, RebalanceLimits, WeightRange } from "./types";
 
@@ -544,15 +544,6 @@ export const getOpenAuction = (
 
   // calculate metrics
 
-  // {wholeTok/wholeBU} = D27{tok/BU} * {BU/wholeBU} / {tok/wholeTok} / D27
-  weightRanges = newWeights.map((range, i) => {
-    return {
-      low: new Decimal(range.low.toString()).div(decimalScale[i]).div(D9d),
-      spot: new Decimal(range.spot.toString()).div(decimalScale[i]).div(D9d),
-      high: new Decimal(range.high.toString()).div(decimalScale[i]).div(D9d),
-    };
-  });
-
   // basket
   const auctionTokens: string[] = [];
   const auctionWeights: WeightRange[] = []; // D27{tok/BU}
@@ -573,22 +564,28 @@ export const getOpenAuction = (
     auctionWeights.push(newWeights[i]);
     auctionPrices.push(newPrices[i]);
 
-    // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
-    const buyUpTo = weightRanges[i].low.mul(actualLimits.low);
-    const sellDownTo = weightRanges[i].high.mul(actualLimits.high);
+    // {tok} = D27{tok/BU} * D18{BU/share} * {share} / D18 / D27
+    const buyUpTo = (newWeights[i].low * newLimits.low * _supply) / D18n / D27n;
+    const sellDownTo = (newWeights[i].high * newLimits.high * _supply + (D18n * D27n - 1n)) / D18n / D27n;
 
-    if (folio[i].lt(buyUpTo)) {
-      // {USD} = {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
-      const tokenDeficitValue = buyUpTo.sub(folio[i]).mul(prices[i]).mul(supply);
+    if (_assets[i] < buyUpTo) {
+      // {wholeTok} = {tok} / {tok/wholeTok}
+      const deficitAmount = new Decimal((buyUpTo - _assets[i]).toString()).div(decimalScale[i]);
+
+      // {USD} = {wholeTok} * {USD/wholeTok}
+      const tokenDeficitValue = deficitAmount.mul(prices[i]);
 
       // $1 minimum
       if (tokenDeficitValue.gte(ONE)) {
         deficitTokens.push(token);
         deficitTokenSizes.push(tokenDeficitValue.toNumber());
       }
-    } else if (folio[i].gt(sellDownTo)) {
-      // {USD} = {wholeTok/wholeShare} * {USD/wholeTok} * {wholeShare}
-      const tokenSurplusValue = folio[i].sub(sellDownTo).mul(prices[i]).mul(supply);
+    } else if (_assets[i] > sellDownTo) {
+      // {wholeTok} = {tok} / {tok/wholeTok}
+      const surplusAmount = new Decimal((_assets[i] - sellDownTo).toString()).div(decimalScale[i]);
+
+      // {USD} = {wholeTok} * {USD/wholeTok}
+      const tokenSurplusValue = surplusAmount.mul(prices[i]);
 
       // $1 minimum
       if (tokenSurplusValue.gte(ONE)) {
