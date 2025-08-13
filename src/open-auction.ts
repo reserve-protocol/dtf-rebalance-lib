@@ -269,12 +269,8 @@ export const getOpenAuction = (
   // {wholeBU/wholeShare} = {USD/wholeShare} / {USD/wholeBU}
   const spotLimit = shareValue.div(buValue);
 
-  // {wholeBU/wholeShare} = D18{BU/share} / D18
-  const prevSpotLimit = new Decimal(rebalance.limits.spot.toString()).div(D18d);
-  const maxSpotLimit = spotLimit.gt(prevSpotLimit) ? spotLimit : prevSpotLimit;
-
   // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
-  const expectedBalances = weightRanges.map((weightRange) => weightRange.spot.mul(maxSpotLimit));
+  const expectedBalances = weightRanges.map((weightRange) => weightRange.spot.mul(spotLimit));
 
   // absolute
   // {1} = {USD/wholeShare} / {USD/wholeShare}
