@@ -32,7 +32,7 @@ export const getBasketDistribution = (_bals: bigint[], _prices: number[], decima
 };
 
 /**
- * Calculate basket deviation basket on balances and current weights
+ * Calculate how accurately balances reflect weights
  *
  * @param supply {share} Current total supply
  * @param _bals {tok} Current balances
@@ -42,7 +42,7 @@ export const getBasketDistribution = (_bals: bigint[], _prices: number[], decima
  * @param limits Current limits from getRebalance.limits
  * @returns {1} Basket deviation
  */
-export const getBasketDeviation = (
+export const getBasketAccuracy = (
   supply: bigint,
   _bals: bigint[],
   _prices: number[],
@@ -74,5 +74,5 @@ export const getBasketDeviation = (
     }
   }
 
-  return surplusValue.div(totalValue).toNumber();
+  return totalValue.sub(surplusValue).div(totalValue).toNumber();
 };
