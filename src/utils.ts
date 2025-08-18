@@ -70,7 +70,7 @@ export const getBasketDeviation = (
       );
 
       // {USD} = {tok} * {USD/wholeTok} / {tok/wholeTok}
-      totalValue = totalValue.add(new Decimal(_bals[i].toString()).mul(prices[i])).div(decimalScale[i]);
+      totalValue = totalValue.add(new Decimal(_bals[i].toString()).mul(prices[i]).div(decimalScale[i]));
     }
   }
 
