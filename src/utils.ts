@@ -68,10 +68,10 @@ export const getBasketAccuracy = (
       surplusValue = surplusValue.add(
         new Decimal((_bals[i] - expectedBal).toString()).mul(prices[i]).div(decimalScale[i]),
       );
-
-      // {USD} = {tok} * {USD/wholeTok} / {tok/wholeTok}
-      totalValue = totalValue.add(new Decimal(_bals[i].toString()).mul(prices[i]).div(decimalScale[i]));
     }
+
+    // {USD} = {tok} * {USD/wholeTok} / {tok/wholeTok}
+    totalValue = totalValue.add(new Decimal(_bals[i].toString()).mul(prices[i]).div(decimalScale[i]));
   }
 
   return totalValue.sub(surplusValue).div(totalValue).toNumber();
