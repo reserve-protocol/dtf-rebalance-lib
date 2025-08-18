@@ -40,7 +40,7 @@ export const getBasketDistribution = (_bals: bigint[], _prices: number[], decima
  * @param decimals Decimals of each token
  * @param weights Current weights from getRebalance.weights
  * @param limits Current limits from getRebalance.limits
- * @returns {1} Basket deviation
+ * @returns {1} Basket accuracy
  */
 export const getBasketAccuracy = (
   supply: bigint,
