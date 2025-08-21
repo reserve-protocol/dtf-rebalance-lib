@@ -33,3 +33,11 @@ export interface Rebalance {
   availableUntil: bigint;
   priceControl: PriceControl;
 }
+
+export interface Folio {
+  name: string;
+  chainId: number;
+  address: string;
+  proxyAdmin: string;
+  basketGovernor?: string;
+}

@@ -1,14 +1,15 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
+import "@nomicfoundation/hardhat-ethers";
 import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import { Contract } from "ethers";
 
-import { Folio as FolioConfig } from "../constants";
-import { getAssetPrices, whileImpersonating, toPlainObject, getTokenNameAndSymbol } from "../utils";
-import { AuctionMetrics, AuctionRound, getOpenAuction, getTargetBasket } from "../../../src/open-auction";
-import { getStartRebalance } from "../../../src/start-rebalance";
-import { PriceRange, WeightRange } from "../../../src/types";
+import { Folio as FolioConfig } from "../src/types";
+import { getAssetPrices, whileImpersonating, toPlainObject } from "./utils";
+import { AuctionMetrics, AuctionRound, getOpenAuction, getTargetBasket } from "../src/open-auction";
+import { getStartRebalance } from "../src/start-rebalance";
+import { PriceRange, WeightRange } from "../src/types";
 
 interface RebalanceContracts {
   folio: Contract;
@@ -28,7 +29,7 @@ export async function runRebalance(
   contracts: RebalanceContracts,
   signers: RebalanceSigners,
   orderedTokens: string[],
-  initialBals: Record<string, bigint>,
+  initialAmounts: Record<string, bigint>,
   targetBasket: Record<string, bigint>,
   rebalancePricesRec: Record<string, { snapshotPrice: number }>,
   finalStageAt: number,
@@ -40,15 +41,15 @@ export async function runRebalance(
   const supply = await folio.totalSupply();
 
   for (const token of orderedTokens) {
-    if (!(token in initialBals)) {
-      throw new Error(`Token ${token} from orderedTokens not found in initialBals`);
+    if (!(token in initialAmounts)) {
+      throw new Error(`Token ${token} from orderedTokens not found in initialAmounts`);
     }
     if (!(token in targetBasket)) {
       throw new Error(`Token ${token} from orderedTokens not found in targetBasket`);
     }
   }
-  if (Object.keys(initialBals).length !== orderedTokens.length) {
-    throw new Error("Mismatch between orderedTokens length and initialBals keys");
+  if (Object.keys(initialAmounts).length !== orderedTokens.length) {
+    throw new Error("Mismatch between orderedTokens length and initialAmounts keys");
   }
   if (Object.keys(targetBasket).length !== orderedTokens.length) {
     throw new Error("Mismatch between orderedTokens length and targetBasket keys");
@@ -59,7 +60,14 @@ export async function runRebalance(
     allDecimalsRec[asset] = await (await hre.ethers.getContractAt("IERC20Metadata", asset)).decimals();
   }
 
-  const initialBalsArray = orderedTokens.map((token) => initialBals[token]);
+  const initialAmountsArray = orderedTokens.map((token) => initialAmounts[token]);
+
+  const currentBasketValuesRec: Record<string, number> = {};
+  orderedTokens.forEach((token) => {
+    currentBasketValuesRec[token] =
+      (rebalancePricesRec[token].snapshotPrice * Number(initialAmounts[token])) / Number(10n ** allDecimalsRec[token]);
+  });
+
   const [weightControl] = await folio.rebalanceControl();
 
   const pricesArray = orderedTokens.map((token) => rebalancePricesRec[token].snapshotPrice);
@@ -68,7 +76,7 @@ export async function runRebalance(
   const startRebalanceArgs = getStartRebalance(
     supply,
     orderedTokens,
-    initialBalsArray,
+    initialAmountsArray,
     decimalsArray,
     orderedTokens.map((token) => targetBasket[token]),
     pricesArray,
@@ -110,7 +118,12 @@ export async function runRebalance(
     const newImplementationBytecode = await hre.ethers.provider.getCode(await newMockDeployment.getAddress());
 
     if (newImplementationBytecode !== currentCode) {
-      const { name, symbol, decimals: tokenDecimalsValue } = await getTokenNameAndSymbol(asset);
+      const tokenContract2 = await hre.ethers.getContractAt("IERC20Metadata", asset);
+      const [name, symbol, tokenDecimalsValue] = await Promise.all([
+        tokenContract2.name(),
+        tokenContract2.symbol(),
+        tokenContract2.decimals(),
+      ]);
       await hre.network.provider.send("hardhat_setCode", [asset, newImplementationBytecode]);
       await (await tokenContract.init(name, symbol, tokenDecimalsValue)).wait();
       await (await tokenContract.mint(await folio.getAddress(), balBefore)).wait();
@@ -170,12 +183,12 @@ export async function runRebalance(
     expect(orderedTokens.length).to.equal(rebalanceState.tokens.length);
     expect(rebalanceState.availableUntil).to.be.greaterThan(await time.latest());
 
-    const [, balsFromFolio] = await folio.totalAssets();
-    expect(balsFromFolio.length).to.equal(rebalanceState.tokens.length);
+    const [, amtsFromFolio] = await folio.totalAssets();
+    expect(amtsFromFolio.length).to.equal(rebalanceState.tokens.length);
 
     const weights: WeightRange[] = [];
     const initialPrices: PriceRange[] = [];
-    const bals: bigint[] = [];
+    const amts: bigint[] = [];
     const inRebalance: boolean[] = [];
     const auctionPrices: number[] = [];
 
@@ -187,7 +200,7 @@ export async function runRebalance(
 
       weights.push(rebalanceState.weights[currentIndex]);
       initialPrices.push(startRebalanceArgs.prices[idx]);
-      bals.push(balsFromFolio[currentIndex]);
+      amts.push(amtsFromFolio[currentIndex]);
       inRebalance.push(rebalanceState.inRebalance[currentIndex]);
       auctionPrices.push(auctionPricesRec[token].snapshotPrice);
 
@@ -212,10 +225,10 @@ export async function runRebalance(
         priceControl: rebalanceState.priceControl,
       },
       supply,
-      supply,
-      initialBalsArray,
-      auctionTargetBasket,
-      bals,
+      supply, // _initialSupply
+      initialAmountsArray, // _initialAssets
+      auctionTargetBasket, // _targetBasket
+      amts, // _assets
       decimalsArray,
       auctionPrices,
       auctionPrices.map((_: number) => 0.01),
@@ -269,12 +282,14 @@ export async function runRebalance(
         await (await (buyTokenContract.connect(signer) as Contract).approve(await folio.getAddress(), bid[3])).wait();
         await (await (folio.connect(signer) as any).bid(auctionId, bid[0], bid[1], bid[2], bid[3], false, "0x")).wait();
 
-        const sellAttributes = await getTokenNameAndSymbol(bid[0]);
-        const buyAttributes = await getTokenNameAndSymbol(bid[1]);
+        const sellTokenContract = await hre.ethers.getContractAt("IERC20Metadata", bid[0]);
+        const buyTokenContract2 = await hre.ethers.getContractAt("IERC20Metadata", bid[1]);
+        const sellSymbol = await sellTokenContract.symbol();
+        const buySymbol = await buyTokenContract2.symbol();
 
         console.log(
           "      🔄 ",
-          `${sellAttributes.symbol} ($${((Number(bid[2]) * auctionPricesRec[bid[0]].snapshotPrice) / Number(10n ** allDecimalsRec[bid[0]])).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) -> ${buyAttributes.symbol} ($${((Number(bid[3]) * auctionPricesRec[bid[1]].snapshotPrice) / Number(10n ** allDecimalsRec[bid[1]])).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
+          `${sellSymbol} ($${((Number(bid[2]) * auctionPricesRec[bid[0]].snapshotPrice) / Number(10n ** allDecimalsRec[bid[0]])).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) -> ${buySymbol} ($${((Number(bid[3]) * auctionPricesRec[bid[1]].snapshotPrice) / Number(10n ** allDecimalsRec[bid[1]])).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
         );
       });
 

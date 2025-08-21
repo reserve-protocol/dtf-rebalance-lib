@@ -127,10 +127,6 @@ export const getOpenAuction = (
   _finalStageAt: number,
   debug?: boolean,
 ): [OpenAuctionArgs, AuctionMetrics] => {
-  if (debug === undefined) {
-    debug = true;
-  }
-
   if (debug) {
     console.log(
       "getOpenAuction",

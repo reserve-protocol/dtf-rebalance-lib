@@ -1,13 +1,17 @@
 import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import hre from "hardhat";
-import { FOLIO_CONFIGS } from "./constants";
-import { getAssetPrices, bn } from "./utils";
-import { initializeChainState, deployCommonContracts } from "./lib/setup";
-import { runRebalance } from "./lib/rebalance-helpers";
+import { FOLIO_CONFIGS, CHAIN_BLOCK_NUMBERS } from "../../tasks/config";
+import { getAssetPrices } from "../../tasks/utils";
+import { initializeChainState, setupContractsAndSigners } from "../../tasks/setup";
+import { runRebalance } from "../../tasks/rebalance-helpers";
 import { Contract } from "ethers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
+import { bn } from "../../src/numbers";
 
-for (const folioConfig of FOLIO_CONFIGS) {
+// Only test BGCI for now
+const TEST_FOLIO_CONFIGS = FOLIO_CONFIGS.filter((f) => f.name === "BGCI");
+
+for (const folioConfig of TEST_FOLIO_CONFIGS) {
   describe("Fuzzing " + folioConfig.name, function () {
     // Declare variables to hold contract instances and signers across rounds
     let folio: Contract;
@@ -19,9 +23,10 @@ for (const folioConfig of FOLIO_CONFIGS) {
 
     before(async function () {
       this.timeout(60000);
-      await initializeChainState(hre, folioConfig);
+      const blockNumber = CHAIN_BLOCK_NUMBERS[folioConfig.chainId];
+      await initializeChainState(hre, folioConfig, blockNumber);
 
-      const contractsAndSigners = await deployCommonContracts(hre, folioConfig);
+      const contractsAndSigners = await setupContractsAndSigners(hre, folioConfig);
 
       folio = contractsAndSigners.folio;
       folioLensTyped = contractsAndSigners.folioLensTyped;

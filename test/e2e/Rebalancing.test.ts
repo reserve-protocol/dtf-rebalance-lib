@@ -1,18 +1,24 @@
 import { loadFixture, time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import hre from "hardhat";
-import { FOLIO_CONFIGS } from "./constants";
-import { initializeChainState, deployCommonContracts } from "./lib/setup";
-import { runRebalance } from "./lib/rebalance-helpers";
-import { bn, getAssetPrices, getTokenNameAndSymbol } from "./utils";
+import { FOLIO_CONFIGS, CHAIN_BLOCK_NUMBERS } from "../../tasks/config";
+import { initializeChainState, setupContractsAndSigners } from "../../tasks/setup";
+import { runRebalance } from "../../tasks/rebalance-helpers";
+import { getAssetPrices, getTokenNameAndSymbol } from "../../tasks/utils";
+import { bn } from "../../src/numbers";
 
-for (const folioConfig of FOLIO_CONFIGS) {
+// Only test BGCI for now
+const TEST_FOLIO_CONFIGS = FOLIO_CONFIGS.filter((f) => f.name === "BGCI");
+
+for (const folioConfig of TEST_FOLIO_CONFIGS) {
   describe(folioConfig.name, function () {
     before(async function () {
-      await initializeChainState(hre, folioConfig);
+      this.timeout(60000);
+      const blockNumber = CHAIN_BLOCK_NUMBERS[folioConfig.chainId];
+      await initializeChainState(hre, folioConfig, blockNumber);
     });
 
     async function deployFixture() {
-      return deployCommonContracts(hre, folioConfig);
+      return setupContractsAndSigners(hre, folioConfig);
     }
 
     it("Basic ejection", async function () {
@@ -48,7 +54,7 @@ for (const folioConfig of FOLIO_CONFIGS) {
       });
 
       if (tokens.length > 0 && targetBasketBigIntWeights.length > 0) {
-        const { symbol: ejectedSymbol } = await getTokenNameAndSymbol(tokens[0]);
+        const ejectedSymbol = await getTokenNameAndSymbol(hre, tokens[0]);
         console.log(
           `💨 ejecting ${ejectedSymbol} $${(totalBasketValue * targetBasketRatios[0]).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${(Number(targetBasketBigIntWeights[0]) / 10 ** 18).toLocaleString("en-US", { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
         );

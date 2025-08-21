@@ -1,13 +1,88 @@
-import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import { HardhatRuntimeEnvironment } from "hardhat/types";
-import "@nomicfoundation/hardhat-ethers";
+import { D18n, D27n, ZERO } from "../src/numbers";
+import { WeightRange, RebalanceLimits } from "../src/types";
 
-import hre from "hardhat";
-import Decimal from "decimal.js-light";
-import { Address } from "viem";
+// Import hardhat-ethers to extend HardhatRuntimeEnvironment with ethers property
+// This is only imported when actually using the hardhat functions
+import "@nomicfoundation/hardhat-ethers";
+import type { HardhatRuntimeEnvironment } from "hardhat/types";
+import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
+
+// Import utilities from src/utils
+import { Decimal } from "../src/utils";
+
+/**
+ * Calculate how accurately balances reflect weights
+ *
+ * @param supply {share} Current total supply
+ * @param _bals {tok} Current balances
+ * @param _prices {USD/wholeTok} Current USD prices for each *whole* token
+ * @param decimals Decimals of each token
+ * @param weights Current weights from getRebalance.weights
+ * @param limits Current limits from getRebalance.limits
+ * @returns {1} Basket accuracy
+ */
+export const getBasketAccuracy = (
+  supply: bigint,
+  _bals: bigint[],
+  _prices: number[],
+  decimals: bigint[],
+  weights: WeightRange[],
+  limits: RebalanceLimits,
+): number => {
+  const decimalScale = decimals.map((d) => new Decimal(`1e${d}`));
+
+  // {USD/wholeTok} = {USD/wholeTok}
+  const prices = _prices.map((a) => new Decimal(a.toString()));
+
+  // {USD}
+  let totalValue = ZERO;
+  let surplusValue = ZERO;
+
+  for (let i = 0; i < weights.length; i++) {
+    // {tok} = D27{tok/BU} * D18{BU/share} * {share} / D27 / D18
+    const expectedBal = (weights[i].spot * limits.spot * supply) / D27n / D18n;
+
+    if (_bals[i] > expectedBal) {
+      // {USD} += {tok} * {USD/wholeTok} / {tok/wholeTok}
+      surplusValue = surplusValue.add(
+        new Decimal((_bals[i] - expectedBal).toString()).mul(prices[i]).div(decimalScale[i]),
+      );
+    }
+
+    // {USD} += {tok} * {USD/wholeTok} / {tok/wholeTok}
+    totalValue = totalValue.add(new Decimal(_bals[i].toString()).mul(prices[i]).div(decimalScale[i]));
+  }
+
+  return totalValue.sub(surplusValue).div(totalValue).toNumber();
+};
+
+export function toPlainObject(obj: any): any {
+  if (typeof obj !== "object" || obj === null) {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => toPlainObject(item));
+  }
+
+  const plainObject: any = {};
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key) && typeof obj[key] !== "function") {
+      const value = obj[key];
+      if (typeof value === "bigint") {
+        plainObject[key] = value.toString();
+      } else if (typeof value === "object") {
+        plainObject[key] = toPlainObject(value);
+      } else {
+        plainObject[key] = value;
+      }
+    }
+  }
+  return plainObject;
+}
 
 type TokenPrice = {
-  address: Address;
+  address: string;
   price?: number;
 };
 
@@ -140,81 +215,45 @@ export const getAssetPrices = async (
   return result;
 };
 
-type ImpersonationFunction<T> = (signer: HardhatEthersSigner) => Promise<T>;
-
-export const whileImpersonating = async (
+export async function whileImpersonating(
   hre: HardhatRuntimeEnvironment,
   address: string,
-  f: ImpersonationFunction<void>,
-) => {
-  // Set maximum ether balance at address
-  await hre.network.provider.request({
-    method: "hardhat_setBalance",
-    params: [address, "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"],
-  });
-  await hre.network.provider.request({
-    method: "hardhat_impersonateAccount",
-    params: [address],
-  });
+  fn: (signer: HardhatEthersSigner) => Promise<void>,
+) {
+  const FORK_FUNDING = hre.ethers.parseEther("5000");
+  const impersonate = async (addr: string) => {
+    await hre.network.provider.request({
+      method: "hardhat_impersonateAccount",
+      params: [addr],
+    });
+  };
+  const stopImpersonating = async (addr: string) => {
+    await hre.network.provider.request({
+      method: "hardhat_stopImpersonatingAccount",
+      params: [addr],
+    });
+  };
+
+  await impersonate(address);
   const signer = await hre.ethers.getSigner(address);
 
-  await f(signer);
-
-  await hre.network.provider.request({
-    method: "hardhat_stopImpersonatingAccount",
-    params: [address],
-  });
-  // If anyone ever needs it, we could make sure here that we set the balance at address back to
-  // its original quantity...
-};
-
-export const bn = (str: string | Decimal): bigint => {
-  return BigInt(new Decimal(str).toFixed(0));
-};
-
-/**
- * Recursively converts ethers.js Result objects to plain JavaScript objects/arrays
- */
-export function toPlainObject(obj: any): any {
-  // Handle null/undefined
-  if (obj == null) return obj;
-
-  // Handle primitive types
-  if (typeof obj !== "object") return obj;
-
-  // Handle bigint
-  if (typeof obj === "bigint") return obj;
-
-  // Handle Result objects (check if it has numeric indices like an array)
-  if (obj.constructor?.name === "Result" || (typeof obj.length === "number" && obj.length >= 0)) {
-    // Convert to array and recursively process each element
-    return Array.from(obj).map((item) => toPlainObject(item));
+  if ((await hre.ethers.provider.getBalance(address)) < FORK_FUNDING) {
+    await hre.network.provider.send("hardhat_setBalance", [address, hre.ethers.toQuantity(FORK_FUNDING)]);
   }
 
-  // Handle regular arrays
-  if (Array.isArray(obj)) {
-    return obj.map((item) => toPlainObject(item));
+  try {
+    await fn(signer);
+  } finally {
+    await stopImpersonating(address);
   }
-
-  // Handle plain objects
-  const result: any = {};
-  for (const [key, value] of Object.entries(obj)) {
-    result[key] = toPlainObject(value);
-  }
-
-  return result;
 }
 
-export async function getTokenNameAndSymbol(addr: string) {
-  const token = await hre.ethers.getContractAt("ERC20Mock", addr);
-
-  // MKR exemption
-  if ((await token.getAddress()) === "0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2") {
-    return { name: "Maker", symbol: "MKR", decimals: 18 };
+export async function getTokenNameAndSymbol(hre: HardhatRuntimeEnvironment, token: string) {
+  try {
+    const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
+    const [name, symbol] = await Promise.all([tokenContract.name(), tokenContract.symbol()]);
+    return `${name} (${symbol})`;
+  } catch (e) {
+    return token;
   }
-
-  const name = await token.name();
-  const symbol = await token.symbol();
-  const decimals = await token.decimals();
-  return { name, symbol, decimals };
 }
