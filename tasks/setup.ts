@@ -1,7 +1,7 @@
+import "@nomicfoundation/hardhat-ethers";
 import { reset } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import "@nomicfoundation/hardhat-ethers";
 import { Folio } from "../src/types";
 import { ZERO_BYTES, CHAIN_RPC_URLS } from "./config";
 import { whileImpersonating } from "./utils";

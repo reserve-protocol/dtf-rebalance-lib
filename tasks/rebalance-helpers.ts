@@ -1,6 +1,6 @@
+import "@nomicfoundation/hardhat-ethers";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import "@nomicfoundation/hardhat-ethers";
 import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import { Contract } from "ethers";

@@ -1,60 +1,6 @@
-import { D18n, D27n, ZERO } from "../src/numbers";
-import { WeightRange, RebalanceLimits } from "../src/types";
-
-// Import hardhat-ethers to extend HardhatRuntimeEnvironment with ethers property
-// This is only imported when actually using the hardhat functions
 import "@nomicfoundation/hardhat-ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-
-// Import utilities from src/utils
-import { Decimal } from "../src/utils";
-
-/**
- * Calculate how accurately balances reflect weights
- *
- * @param supply {share} Current total supply
- * @param _bals {tok} Current balances
- * @param _prices {USD/wholeTok} Current USD prices for each *whole* token
- * @param decimals Decimals of each token
- * @param weights Current weights from getRebalance.weights
- * @param limits Current limits from getRebalance.limits
- * @returns {1} Basket accuracy
- */
-export const getBasketAccuracy = (
-  supply: bigint,
-  _bals: bigint[],
-  _prices: number[],
-  decimals: bigint[],
-  weights: WeightRange[],
-  limits: RebalanceLimits,
-): number => {
-  const decimalScale = decimals.map((d) => new Decimal(`1e${d}`));
-
-  // {USD/wholeTok} = {USD/wholeTok}
-  const prices = _prices.map((a) => new Decimal(a.toString()));
-
-  // {USD}
-  let totalValue = ZERO;
-  let surplusValue = ZERO;
-
-  for (let i = 0; i < weights.length; i++) {
-    // {tok} = D27{tok/BU} * D18{BU/share} * {share} / D27 / D18
-    const expectedBal = (weights[i].spot * limits.spot * supply) / D27n / D18n;
-
-    if (_bals[i] > expectedBal) {
-      // {USD} += {tok} * {USD/wholeTok} / {tok/wholeTok}
-      surplusValue = surplusValue.add(
-        new Decimal((_bals[i] - expectedBal).toString()).mul(prices[i]).div(decimalScale[i]),
-      );
-    }
-
-    // {USD} += {tok} * {USD/wholeTok} / {tok/wholeTok}
-    totalValue = totalValue.add(new Decimal(_bals[i].toString()).mul(prices[i]).div(decimalScale[i]));
-  }
-
-  return totalValue.sub(surplusValue).div(totalValue).toNumber();
-};
 
 export function toPlainObject(obj: any): any {
   if (typeof obj !== "object" || obj === null) {
