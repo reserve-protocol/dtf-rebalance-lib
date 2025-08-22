@@ -272,7 +272,7 @@ export const getOpenAuction = (
   // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
   const expectedBalances = weightRanges.map((weightRange) => weightRange.spot.mul(maxSpotLimit));
 
-  // absolute
+  // absoluteProgression
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   let progression = folio
     .map((actualBalance, i) => {
@@ -318,7 +318,7 @@ export const getOpenAuction = (
     ? ONE
     : progression.sub(initialProgression).div(ONE.sub(initialProgression));
 
-  let rebalanceTarget = ONE; // absolute
+  let target = ONE; // absolute
   let round: AuctionRound = AuctionRound.FINAL;
 
   if (debug) {
@@ -333,18 +333,18 @@ export const getOpenAuction = (
   if (progression.lt(0.99) && relativeProgression.lt(finalStageAt.sub(0.02))) {
     round = AuctionRound.PROGRESS;
 
-    rebalanceTarget = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt));
+    target = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt));
 
-    if (rebalanceTarget.gte(0.997)) {
-      rebalanceTarget = ONE;
+    if (target.gte(0.997)) {
+      target = ONE;
     }
 
-    if (rebalanceTarget.eq(ONE)) {
+    if (target.eq(ONE)) {
       round = AuctionRound.FINAL;
     }
   }
 
-  // EJECT
+  // EJECT -- used later to adjust weights.high and limits.high
   if (portionBeingEjected.gt(1e-5)) {
     round = AuctionRound.EJECT;
 
@@ -356,26 +356,26 @@ export const getOpenAuction = (
         ejectionTarget = ONE;
       }
 
-      if (ejectionTarget.gt(rebalanceTarget)) {
-        rebalanceTarget = ejectionTarget;
+      if (ejectionTarget.gt(target)) {
+        target = ejectionTarget;
       }
     }
   }
 
-  if (rebalanceTarget.lte(ZERO) || rebalanceTarget.lt(initialProgression) || rebalanceTarget.gt(ONE)) {
+  if (target.lte(ZERO) || target.lt(initialProgression) || target.gt(ONE)) {
     throw new Error("something has gone very wrong");
   }
 
-  const relativeTarget = rebalanceTarget.sub(initialProgression).div(ONE.sub(initialProgression));
+  const relativeTarget = target.sub(initialProgression).div(ONE.sub(initialProgression));
 
   if (debug) {
     console.log("round", round);
-    console.log("rebalanceTarget", rebalanceTarget.toString());
+    console.log("target", target.toString());
     console.log("relativeTarget", relativeTarget.toString());
   }
 
   // {1}
-  const delta = ONE.sub(rebalanceTarget);
+  const delta = ONE.sub(target);
 
   // ================================================================
 
@@ -608,7 +608,7 @@ export const getOpenAuction = (
       initialProgression: initialProgression.toNumber(),
       absoluteProgression: progression.toNumber(),
       relativeProgression: relativeProgression.toNumber(),
-      target: rebalanceTarget.toNumber(),
+      target: target.toNumber(),
       relativeTarget: relativeTarget.toNumber(),
       auctionSize: auctionSize,
       surplusTokens: surplusTokens,
