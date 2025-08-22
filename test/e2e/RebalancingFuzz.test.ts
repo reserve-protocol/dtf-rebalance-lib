@@ -121,7 +121,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
           initialAmountsRec,
           targetBasketRec,
           pricesRec,
-          0.95,
+          0.9,
           false,
         );
 

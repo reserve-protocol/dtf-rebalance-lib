@@ -59,7 +59,7 @@ const assertOpenAuctionArgsEqual = (a: OpenAuctionArgs, b: OpenAuctionArgs, prec
 describe("NATIVE DTFs", () => {
   const supply = bn("1e18"); // 1 supply
   const auctionPriceError = [0.01, 0.01, 0.01]; // Smaller price error for getOpenAuction
-  const finalStageAtForTest = 0.95; // Standard finalStageAt
+  const finalStageAtForTest = 0.9; // Standard finalStageAt
 
   // Common expected prices for tokens [USDC (6dec), DAI (18dec), USDT (6dec)]
   // when market prices are [1,1,1], auctionPriceError is [0.01,0.01,0.01], and priceControl=true,
@@ -168,11 +168,11 @@ describe("NATIVE DTFs", () => {
         newWeights: [
           initialWeightsS1[0], // USDC target 0
           {
-            low: bn("475000000000000000000000000"),
+            low: bn("450000000000000000000000000"),
             spot: bn("500000000000000000000000000"),
             high: bn("555555555555555555555555556"),
           },
-          { low: bn("475000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") },
+          { low: bn("450000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
         newLimits: initialLimitsS1,
@@ -241,14 +241,14 @@ describe("NATIVE DTFs", () => {
         newWeights: [
           weightsDeferred[0], // USDC: unchanged (still 0)
           {
-            low: bn("475000000000000000000000000"), // Calculated value, clamped between 1 and 1e54
+            low: bn("450000000000000000000000000"), // Calculated value, clamped between 1 and 1e54
             spot: bn("500000000000000000000000000"),
-            high: bn("577500000000000000000000000"), // 525e24 * 1.1 for ejection = 577.5e24
+            high: bn("605000000000000000000000000"), // 500e24 * 1.1 * 1.1 for ejection = 605e24
           },
           {
-            low: bn("475000000000000"), // Calculated value, clamped between 1 and 1e54
+            low: bn("450000000000000"), // Calculated value, clamped between 1 and 1e54
             spot: bn("500000000000000"),
-            high: bn("577500000000000"), // 525e12 * 1.1 for ejection = 577.5e12
+            high: bn("605000000000000"), // 500e12 * 1.1 * 1.1 for ejection = 605e12
           },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
@@ -280,11 +280,11 @@ describe("NATIVE DTFs", () => {
         newWeights: [
           initialWeightsS1[0],
           {
-            low: bn("475000000000000000000000000"),
+            low: bn("450000000000000000000000000"),
             spot: bn("500000000000000000000000000"),
             high: bn("555555555555555555555555556"),
           },
-          { low: bn("475000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") },
+          { low: bn("450000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
         newLimits: initialLimitsS1,
@@ -352,11 +352,11 @@ describe("NATIVE DTFs", () => {
         newWeights: [
           initialWeightsS1[0],
           {
-            low: bn("475000000000000000000000000"),
+            low: bn("450000000000000000000000000"),
             spot: bn("500000000000000000000000000"),
             high: bn("555555555555555555555555556"),
           },
-          { low: bn("475000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") },
+          { low: bn("450000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") },
         ],
         newPrices: initialPricesS1, // from mockRebalance due to priceControl=false
         newLimits: initialLimitsS1,
@@ -388,21 +388,21 @@ describe("NATIVE DTFs", () => {
       ];
       // shareValue = 0.9 due to USDC price drop
       // idealWeight calculations affected by shareValue change
-      // With delta=0.05 and ejection, weights get (1-delta)/(low/spot) factor
+      // With delta=0.1 and ejection, weights get adjusted
       assertOpenAuctionArgsEqual(openAuctionArgs, {
         rebalanceNonce: 1n,
         tokens: tokens, // All tokens
         newWeights: [
           initialWeightsS1[0], // USDC target 0
           {
-            low: bn("450000000000000000000000000"),
+            low: bn("450000000000000000000000000"), // Clamped to initial weight low
             spot: bn("450000000000000000000000000"),
-            high: bn("519750000000000000000000000"), // Calculated value with ejection
+            high: bn("544500000000000000000000000"), // 0.45e27 * 1.1 * 1.1 = 0.5445e27
           },
           {
-            low: bn("450000000000000"),
+            low: bn("450000000000000"), // Clamped to initial weight low
             spot: bn("450000000000000"),
-            high: bn("519750000000000"), // Calculated value with ejection
+            high: bn("544500000000000"), // 0.45e15 * 1.1 * 1.1 = 0.5445e15
           },
         ],
         newPrices: expectedNewPricesLoss,
@@ -475,14 +475,14 @@ describe("NATIVE DTFs", () => {
         tokens: tokens, // All tokens are returned
         newWeights: [
           initialWeightsS1[0], // USDC: unchanged (still 0)
-          // DAI: actual calculated values from debug output
+          // DAI: actual calculated values with delta=0.1
           {
-            low: bn("475004750000000000000000000"),
-            spot: bn("500005000000000000000000000"),
+            low: bn("450009000000000000000000000"),
+            spot: bn("500010000000000000000000000"),
             high: bn("555555555555555555555555556"),
           },
-          // USDT: actual calculated values from debug output
-          { low: bn("475004750000000"), spot: bn("500005000000000"), high: bn("555555555555556") },
+          // USDT: actual calculated values with delta=0.1
+          { low: bn("450009000000000"), spot: bn("500010000000000"), high: bn("555555555555556") },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT, // All token prices
         newLimits: initialLimitsS1, // newLimits will be clamped to initial flat NATIVE limits
@@ -582,7 +582,7 @@ describe("NATIVE DTFs", () => {
         rebalanceNonce: 2n,
         tokens: tokens,
         newWeights: [
-          { low: bn("950000000000000"), spot: bn("1000000000000000"), high: bn("1111111111111111") },
+          { low: bn("900000000000000"), spot: bn("1000000000000000"), high: bn("1111111111111111") },
           initialWeightsS2[1],
           initialWeightsS2[2],
         ],
@@ -612,7 +612,7 @@ describe("NATIVE DTFs", () => {
         rebalanceNonce: 2n,
         tokens: tokens,
         newWeights: [
-          { low: bn("950000000000000"), spot: bn("1000000000000000"), high: bn("1111111111111111") },
+          { low: bn("900000000000000"), spot: bn("1000000000000000"), high: bn("1111111111111111") },
           initialWeightsS2[1],
           initialWeightsS2[2],
         ],
@@ -689,7 +689,7 @@ describe("NATIVE DTFs", () => {
         tokens: tokens, // All tokens included (USDC has deficit, DAI/USDT have surpluses)
         newWeights: [
           {
-            low: bn("1055555555555556"), // Updated: 1.111...e15 * 0.95 = 1.055...e15
+            low: bn("1000000000000000"), // Updated: 1.111...e15 * 0.9 = 1.0e15
             spot: bn("1111111111111111"),
             high: bn("1111111111111111"), // Clamped to weight range limit
           },
@@ -733,9 +733,9 @@ describe("NATIVE DTFs", () => {
         tokens: tokens, // All tokens included
         newWeights: [
           {
-            low: bn("900000000000000"), // Clamped to weight range low limit
+            low: bn("900000000000000"), // Clamped to initial weight low
             spot: bn("909090909090909"), // Updated: 9.09091e14
-            high: bn("1050000000000000"), // Calculated value with ejection
+            high: bn("1100000000000000"), // 9.09091e14 * 1.1 * 1.1 = 1.1e15
           },
           initialWeightsS2[1],
           initialWeightsS2[2],
@@ -888,7 +888,7 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
   const priceErrorStartRebalance = [0.1, 0.1, 0.1]; // For getStartRebalance limits
   const targetBasketUSDCtoDAIUST = [bn("0"), bn("5e17"), bn("5e17")]; // Target 0% USDC, 50% DAI, 50% USDT
   const auctionPriceErrorSmall = [0.01, 0.01, 0.01]; // For getOpenAuction price calcs
-  const finalStageAtForTest = 0.95; // Standard finalStageAt
+  const finalStageAtForTest = 0.9; // Standard finalStageAt
 
   // Step 0: getStartRebalance for TRACKING DTF
   const _folioUSDCStart = [bn("1e6"), bn("0"), bn("0")]; // 100% USDC, use as initialFolio for this sequence
@@ -983,15 +983,15 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
       auctionPriceErrorSmall,
       finalStageAtForTest,
     );
-    // Expected: buyTarget=1 (ejection). idealSpotLimit=1. limitDelta=0.
+    // Expected: buyTarget=1 (ejection). idealSpotLimit=1. limitDelta=0.1.
     // newLimits before clamp: {1e18,1e18,1e18}. After initialLimitsTracking clamp: {1e18,1e18,1e18}
-    // Re-eval: portionBeingEjected = 1. initialProgression = 0. progression = 0. target = 0+(1-0)*0.95=0.95. delta = 0.05.
-    // newLimits.low = 1*(1-0.05)=0.95e18. Clamped by initial (0.909e18): 0.95e18.
-    // newLimits.high = 1*(1+0.05)=1.05e18. Clamped by initial (1.1e18): 1.05e18.
+    // Re-eval: portionBeingEjected = 1. initialProgression = 0. progression = 0. target = 0+(1-0)*0.9=0.9. delta = 0.1.
+    // newLimits.low = 1*(1-0.1)=0.9e18. Clamped by initial (0.909e18): 0.9e18.
+    // newLimits.high = 1*(1+0.1)=1.1e18. Clamped by initial (1.1e18): 1.1e18.
     assertRebalanceLimitsEqual(openAuctionArgs1.newLimits, {
-      low: bn("950000000000000000"),
+      low: bn("900000000000000000"),
       spot: bn("1e18"),
-      high: bn("1111111111111111111"),
+      high: bn("1111111111111111111"), // Clamped to initial limit
     });
     // For TRACKING, all tokens are included (USDC has surplus, DAI/USDT have deficits)
     assert.deepEqual(openAuctionArgs1.tokens, tokens);
@@ -1018,7 +1018,7 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
     // USDT: expectedInBU = 1*0.5/1 = 0.5. actual = 0.7. balanceInBU = 0.5. value = 0.5.
     // progression = (0.3+0.5)/1 = 0.8. initialProgression (from _folioUSDCStart) = 0.
     // relativeProgression = (0.8 - 0) / (1 - 0) = 0.8.
-    // finalStageAt = 0.95. threshold = 0.95 - 0.02 = 0.93. 0.8 < 0.93 is TRUE.
+    // finalStageAt = 0.9. threshold = 0.9 - 0.02 = 0.93. 0.8 < 0.93 is TRUE.
     const _folio2 = [bn("0"), bn("3e17"), bn("7e5")]; // Corresponds to 0.3 DAI, 0.7 USDT, total value $1
     const currentMarketPrices2 = [1, 1, 1];
     const mockRebalance2: Rebalance = {
@@ -1039,14 +1039,14 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
       finalStageAtForTest,
     );
 
-    // Expected: buyTarget=0.95 (finalStageAt). idealSpotLimit=1. limitDelta=0.05.
-    // newLimits pre-clamp: low=0.95e18, spot=1e18, high=1.05e18.
-    // Clamped by initialLimitsTracking (9.09e17,1e18,1.1e18):
-    // low=max(0.95e18,9.0909e17)=9.5e17. spot=1e18. high=min(1.05e18,1.1e18)=1.05e18.
+    // Expected: buyTarget=0.9 (finalStageAt). idealSpotLimit=1. limitDelta=0.1.
+    // newLimits pre-clamp: low=0.9e18, spot=1e18, high=1.1e18.
+    // Clamped by initialLimitsTracking (9.09e17,1e18,1.111e18):
+    // low=max(0.9e18,9.09e17)=0.9e18. spot=1e18. high=min(1.1e18,1.111e18)=1.1e18.
     assertRebalanceLimitsEqual(openAuctionArgs2.newLimits, {
-      low: bn("950000000000000000"),
+      low: bn("900000000000000000"),
       spot: bn("1e18"),
-      high: bn("1050000000000000000"),
+      high: bn("1100000000000000000"), // Not clamped, 1.1e18 < 1.111e18
     });
     assert.deepEqual(openAuctionArgs2.tokens, ["USDC", "DAI", "USDT"]);
     assert.deepEqual(openAuctionArgs2.newWeights, [
@@ -1074,7 +1074,7 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
     // DAI: exp=0.5, actual=0.48, inBU=0.48. USDT: exp=0.5, actual=0.52, inBU=0.5.
     // progression = (0.48+0.5)/1 = 0.98. initialProgression = 0.
     // relativeProgression = (0.98 - 0) / (1-0) = 0.98.
-    // finalStageAt = 0.95. threshold = 0.95 - 0.02 = 0.93. 0.98 < 0.93 is FALSE.
+    // finalStageAt = 0.9. threshold = 0.9 - 0.02 = 0.93. 0.98 < 0.93 is FALSE.
     const _folio3 = [bn("0"), bn("4.8e17"), bn("5.2e5")]; // Corresponds to 0.48 DAI, 0.52 USDT, total value $1
     const currentMarketPrices3 = [1, 1, 1];
     const mockRebalance3: Rebalance = {
@@ -1131,7 +1131,7 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
   const tokens = ["USDC", "DAI", "USDT"];
   const decimals = [bn("6"), bn("18"), bn("6")];
   const auctionPriceErrorSmall = [0.01, 0.01, 0.01];
-  const finalStageAtForTest = 0.95;
+  const finalStageAtForTest = 0.9;
   const targetBasketHybrid = [bn("0"), bn("5e17"), bn("5e17")]; // Target: 0% USDC, 50% DAI, 50% USDT
   const _initialFolioHybridStart = [bn("1e6"), bn("0"), bn("0")];
 
@@ -1188,13 +1188,13 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
       finalStageAtForTest,
     );
     // Expected: initialProgression=0, progression=0.8, relativeProgression=0.8
-    // rebalanceTarget = 0 + (1-0)*0.95 = 0.95. delta = 0.05.
-    // newLimits.low = 1 * (1-0.05) = 0.95e18. Clamped by hybridLimits_veryWide (1) -> 0.95e18.
-    // newLimits.high = 1 * (1+0.05) = 1.05e18. Clamped by hybridLimits_veryWide (1e36) -> 1.05e18.
+    // rebalanceTarget = 0 + (1-0)*0.9 = 0.9. delta = 0.1.
+    // newLimits.low = 1 * (1-0.1) = 0.9e18. Clamped by hybridLimits_veryWide (1) -> 0.9e18.
+    // newLimits.high = 1 * (1+0.1) = 1.1e18. Clamped by hybridLimits_veryWide (1e36) -> 1.1e18.
     assertRebalanceLimitsEqual(openAuctionArgs.newLimits, {
-      low: bn("950000000000000000"),
+      low: bn("900000000000000000"),
       spot: bn("1e18"),
-      high: bn("1050000000000000000"),
+      high: bn("1100000000000000000"),
     });
     assert.deepEqual(openAuctionArgs.tokens, ["USDC", "DAI", "USDT"]);
     assert.deepEqual(openAuctionArgs.newWeights, [
@@ -1226,7 +1226,7 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
       finalStageAtForTest,
     );
     // Expected: initialProgression=0, progression=0.98, relativeProgression=0.98
-    // 0.98 is not < (0.95-0.02=0.93). So, FINAL round. rebalanceTarget=1. delta=0.
+    // 0.98 is not < (0.9-0.02=0.93). So, FINAL round. rebalanceTarget=1. delta=0.
     assertRebalanceLimitsEqual(openAuctionArgs.newLimits, {
       low: bn("1e18"),
       spot: bn("1e18"),
@@ -1339,13 +1339,13 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
       decimals,
       currentMarketPrices_Hybrid,
       auctionPriceErrorSmall,
-      finalStageAtForTest, // 0.95
+      finalStageAtForTest, // 0.9
     );
     // Expected: initialProgression=0, progression=0.7, relativeProgression=0.7
-    // 0.7 < (0.95-0.02=0.93). PROGRESS round.
-    // rebalanceTarget = 0 + (1-0)*0.95 = 0.95. delta = 0.05.
-    // newLimits.low before clamp = 1 * (1-0.05) = 0.95e18.
-    // newLimits.high before clamp = 1 * (1+0.05) = 1.05e18.
+    // 0.7 < (0.9-0.02=0.88). PROGRESS round.
+    // rebalanceTarget = 0 + (1-0)*0.9 = 0.9. delta = 0.1.
+    // newLimits.low before clamp = 1 * (1-0.1) = 0.9e18.
+    // newLimits.high before clamp = 1 * (1+0.1) = 1.1e18.
     assertRebalanceLimitsEqual(openAuctionArgs.newLimits, {
       low: bn("980000000000000000"),
       spot: bn("1e18"),
@@ -1364,14 +1364,14 @@ describe("Hybrid Rebalance Scenario (Manually Constructed Rebalance Object)", ()
     // The weights need to account for the constrained limits
     assertRangesEqual(openAuctionArgs.newWeights[0], hybridWeights[0]); // USDC unchanged (0)
     assertRangesEqual(openAuctionArgs.newWeights[1], {
-      low: bn("484693877551020408163265306"), // DAI: Actual calculated value accounting for limit constraints
+      low: bn("459183673469387755102040816"), // DAI: Actual calculated value accounting for limit constraints
       spot: bn("500000000000000000000000000"),
-      high: bn("514705882352941176470588235"), // Actual calculated value
+      high: bn("539215686274509803921568627"), // Actual calculated value
     });
     assertRangesEqual(openAuctionArgs.newWeights[2], {
-      low: bn("484693877551020"), // USDT: Actual calculated value
+      low: bn("459183673469388"), // USDT: Actual calculated value
       spot: bn("500000000000000"),
-      high: bn("514705882352941"), // Actual calculated value
+      high: bn("539215686274510"), // Actual calculated value
     });
   });
 
@@ -1461,7 +1461,7 @@ describe("Price Edge Cases in getOpenAuction", () => {
           decimals,
           currentMarketPrices,
           auctionPriceErrorSmall,
-          0.95,
+          0.9,
         );
       },
       {
@@ -1513,7 +1513,7 @@ describe("Price Edge Cases in getOpenAuction", () => {
           decimals,
           currentMarketPrices,
           auctionPriceErrorSmall,
-          0.95,
+          0.9,
         );
       },
       {

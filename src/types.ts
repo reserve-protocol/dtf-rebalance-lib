@@ -37,7 +37,7 @@ export interface Rebalance {
 export interface Folio {
   name: string;
   chainId: number;
-  address: string;
+  folio: string;
   proxyAdmin: string;
   basketGovernor?: string;
 }

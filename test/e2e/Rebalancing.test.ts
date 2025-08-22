@@ -93,7 +93,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
         initialBalancesAsRecord,
         targetWeightsAsRecord,
         prices,
-        0.95,
+        0.9,
         false,
       );
     });

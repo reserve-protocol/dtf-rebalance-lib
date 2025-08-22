@@ -1,6 +1,8 @@
 import "@nomicfoundation/hardhat-ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
+import { Contract } from "ethers";
+import { bn } from "../src/numbers";
 
 export function toPlainObject(obj: any): any {
   if (typeof obj !== "object" || obj === null) {
@@ -149,11 +151,28 @@ export const getAssetPrices = async (
     throw new Error("Failed to fetch all prices");
   }
 
+  // Create a mapping from lowercase addresses to result keys for case-insensitive lookup
+  const resultKeys = Object.keys(result);
+  const lowercaseToKey: Record<string, string> = {};
+  for (const key of resultKeys) {
+    lowercaseToKey[key.toLowerCase()] = key;
+  }
+
   for (const token of tokens) {
-    const priceRatio = Math.abs(result[token].currentPrice - result[token].snapshotPrice) / result[token].snapshotPrice;
+    const resultKey = lowercaseToKey[token.toLowerCase()];
+    if (!resultKey || !result[resultKey]) {
+      console.log(`Warning: No price data found for token ${token}`);
+      continue;
+    }
+    const priceData = result[resultKey];
+    if (priceData.snapshotPrice === 0) {
+      console.log(`Warning: Snapshot price is 0 for token ${token}, skipping ratio check`);
+      continue;
+    }
+    const priceRatio = Math.abs(priceData.currentPrice - priceData.snapshotPrice) / priceData.snapshotPrice;
     if (priceRatio > 10) {
       console.log("timestamp", timestamp);
-      console.log("prices", result[token]);
+      console.log("prices", priceData);
       throw new Error(`price ratio for token ${token} is too extreme: ${priceRatio}`);
     }
   }
@@ -202,4 +221,99 @@ export async function getTokenNameAndSymbol(hre: HardhatRuntimeEnvironment, toke
   } catch (e) {
     return token;
   }
+}
+
+export async function calculateRebalanceMetrics(
+  hre: HardhatRuntimeEnvironment,
+  folio: Contract,
+  orderedTokens: string[],
+  targetBasketRec: Record<string, bigint>,
+  pricesRec: Record<string, { snapshotPrice: number }>,
+  weightControl: boolean
+) {
+  // Get final balances
+  const [finalTokens, balancesAfterFinal] = await folio.totalAssets();
+  const balancesAfterFinalRec: Record<string, bigint> = {};
+  const decimalsRec: Record<string, bigint> = {};
+  
+  // Get decimals for all tokens
+  for (const token of orderedTokens) {
+    const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
+    decimalsRec[token] = await tokenContract.decimals();
+  }
+  
+  // Map balances to record
+  for (let i = 0; i < finalTokens.length; i++) {
+    balancesAfterFinalRec[finalTokens[i]] = balancesAfterFinal[i];
+  }
+  for (const token of orderedTokens) {
+    if (!(token in balancesAfterFinalRec)) {
+      balancesAfterFinalRec[token] = 0n;
+    }
+  }
+
+  // Get final prices if needed (for NATIVE mode)
+  const finalPricesRec = weightControl 
+    ? await getAssetPrices(orderedTokens, 1, await hre.ethers.provider.getBlock("latest").then(b => b!.timestamp))
+    : pricesRec;
+
+  // Calculate total value and individual token values
+  let totalValueAfterFinal = 0;
+  const finalTokenValuesRec: Record<string, number> = {};
+  
+  // Create case-insensitive lookup for prices
+  const priceKeys = Object.keys(finalPricesRec);
+  const lowercaseToPriceKey: Record<string, string> = {};
+  for (const key of priceKeys) {
+    lowercaseToPriceKey[key.toLowerCase()] = key;
+  }
+  
+  orderedTokens.forEach((token: string) => {
+    const priceKey = lowercaseToPriceKey[token.toLowerCase()];
+    const price = priceKey && finalPricesRec[priceKey] ? finalPricesRec[priceKey].snapshotPrice : 0;
+    const bal = balancesAfterFinalRec[token];
+    const decimal = decimalsRec[token];
+
+    finalTokenValuesRec[token] = (price * Number(bal)) / Number(10n ** decimal);
+    totalValueAfterFinal += finalTokenValuesRec[token];
+  });
+
+  // Calculate final basket percentages
+  const finalTargetBasketRec: Record<string, bigint> = {};
+  orderedTokens.forEach((token: string) => {
+    finalTargetBasketRec[token] = bn(((finalTokenValuesRec[token] / totalValueAfterFinal) * 10 ** 18).toString());
+  });
+
+  // Calculate error
+  const totalErrorSquared = orderedTokens
+    .map((token: string) => {
+      const diff =
+        targetBasketRec[token] > finalTargetBasketRec[token]
+          ? targetBasketRec[token] - finalTargetBasketRec[token]
+          : finalTargetBasketRec[token] - targetBasketRec[token];
+
+      return (diff * diff) / 10n ** 18n;
+    })
+    .reduce((a: bigint, b: bigint) => a + b, 0n);
+
+  const totalError = Math.sqrt(Number(totalErrorSquared) / 10 ** 18);
+
+  return {
+    finalTargetBasketRec,
+    totalError,
+    totalValueAfterFinal
+  };
+}
+
+export function logPercentages(
+  label: string,
+  targetBasketWeights: Record<string, bigint>,
+  orderedTokens: string[]
+) {
+  const percentageStrings = orderedTokens.map((token) => {
+    const weight = targetBasketWeights[token] || 0n;
+    const percentage = (Number(weight) / Number(10n ** 18n)) * 100;
+    return percentage === 0 ? "00.00%" : `${percentage.toFixed(2)}%`;
+  });
+  console.log(`${label} [${percentageStrings.join(", ")}]`);
 }

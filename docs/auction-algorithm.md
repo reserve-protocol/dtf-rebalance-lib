@@ -134,7 +134,7 @@ The algorithm progresses through three types of auction rounds:
 6. **\_decimals**: Token decimal places
 7. **\_prices**: Current USD prices per whole token
 8. **\_priceError**: Price error margins for auction pricing
-9. **\_finalStageAt**: Progression threshold (e.g., 0.95 = 95%)
+9. **\_finalStageAt**: Progression threshold (e.g., 0.9 = 95%)
 
 ### Initial Setup with getStartRebalance
 
@@ -253,7 +253,7 @@ This example shows how limits change while weights stay constant throughout.
 **Scenario 2 - Final Round:**
 
 - Current Folio: [0.05 USDC, 0.475 DAI, 0.475 USDT] by value
-- Low limit of 0.95 constrained the first auction
+- Low limit of 0.9 constrained the first auction
 - Progression: 95% (reached finalStageAt threshold)
 - Round: FINAL (skipped PROGRESS since we hit finalStageAt)
 - New Limits: {low: 1e18, spot: 1e18, high: 1e18} (delta = 0)

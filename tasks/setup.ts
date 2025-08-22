@@ -35,7 +35,7 @@ export async function setupContractsAndSigners(hre: HardhatRuntimeEnvironment, f
 
   [bidder] = await hre.ethers.getSigners();
 
-  const folio = await hre.ethers.getContractAt(FolioArtifact.abi, folioConfig.address);
+  const folio = await hre.ethers.getContractAt(FolioArtifact.abi, folioConfig.folio);
 
   admin = await hre.ethers.getSigner(await folio.getRoleMember(ZERO_BYTES, 0));
 
@@ -66,7 +66,7 @@ export async function deployCommonContracts(hre: HardhatRuntimeEnvironment, foli
   const signers = await hre.ethers.getSigners();
   [bidder, admin, rebalanceManager, auctionLauncher] = signers;
 
-  const folio = await hre.ethers.getContractAt(FolioArtifact.abi, folioConfig.address);
+  const folio = await hre.ethers.getContractAt(FolioArtifact.abi, folioConfig.folio);
 
   const MathLibFactory = await hre.ethers.getContractFactory(MathLibArtifact.abi, MathLibArtifact.bytecode.object);
   const mathLib = await MathLibFactory.deploy();
@@ -102,7 +102,7 @@ export async function deployCommonContracts(hre: HardhatRuntimeEnvironment, foli
   await newFolioImp.waitForDeployment();
 
   const implementationUpgradeCalldata = proxyAdmin.interface.encodeFunctionData("upgradeAndCall", [
-    folioConfig.address,
+    folioConfig.folio,
     await newFolioImp.getAddress(),
     "0x",
   ]);

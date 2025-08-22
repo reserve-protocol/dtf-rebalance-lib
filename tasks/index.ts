@@ -1,1 +1,1 @@
-import "./live-rebalance-simulation";
+import "./simulate";
