@@ -35,6 +35,7 @@ export async function runRebalance(
   finalStageAt: number,
   debug?: boolean,
   priceDeviation: number = 0.5, // default to MEDIUM setting
+  originalPricesRec?: Record<string, { snapshotPrice: number }>, // optional original prices for value calculations
   useSimulatedPrices: boolean = false, // default to false for existing tests
   governanceDelayDays?: number, // optional governance delay in days
 ) {
@@ -397,7 +398,17 @@ export async function runRebalance(
           sellPriceKey && auctionPricesRec[sellPriceKey] ? auctionPricesRec[sellPriceKey].snapshotPrice : 0;
         const buyPrice = buyPriceKey && auctionPricesRec[buyPriceKey] ? auctionPricesRec[buyPriceKey].snapshotPrice : 0;
 
-        const sellValue = (Number(bid[2]) * sellPrice) / Number(10n ** allDecimalsRec[bid[0]]);
+        // Use original prices for value calculation if provided, otherwise use auction prices
+        const valuePricesRec = originalPricesRec || auctionPricesRec;
+        const lowercaseToValuePriceKey: Record<string, string> = {};
+        for (const key of Object.keys(valuePricesRec)) {
+          lowercaseToValuePriceKey[key.toLowerCase()] = key;
+        }
+        const sellValuePriceKey = lowercaseToValuePriceKey[bid[0].toLowerCase()];
+        const sellValuePrice = 
+          sellValuePriceKey && valuePricesRec[sellValuePriceKey] ? valuePricesRec[sellValuePriceKey].snapshotPrice : 0;
+        
+        const sellValue = (Number(bid[2]) * sellValuePrice) / Number(10n ** allDecimalsRec[bid[0]]);
         totalRebalancedValue += sellValue; // Accumulate total traded value
 
         console.log(

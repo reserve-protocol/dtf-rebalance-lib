@@ -20,7 +20,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
   .addParam("symbol", "The Folio symbol (e.g., DFX, BED)")
   .addOptionalParam("deviation", "Price deviation setting (0-1, default 0.5 for MEDIUM)", "0.5")
   .addOptionalParam("block", "Block number to fork from (optional, defaults to latest)")
-  .addOptionalParam("volatility", "Market volatility for price simulation (0-1, default 0.6 for 50%)", "0.5")
+  .addOptionalParam("volatility", "Market volatility for price simulation (0-1, default 0.4 for 40%)", "0.4")
   .setAction(async (taskArgs, hre: HardhatRuntimeEnvironment) => {
     const { id, symbol, deviation, block, volatility } = taskArgs;
     const priceDeviationValue = parseFloat(deviation);
@@ -346,16 +346,28 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     // Simulate market price movements during calculated governance delay
     const simulatedPriceData = simulateMarketPrices(historicalPrices, marketVolatility, governanceDelayDays);
 
-    // Build price record for all tokens
-    const prices: Record<string, { snapshotPrice: number }> = {};
+    // Fetch current prices from API for value calculations (single batch call)
+    console.log(`   Fetching current prices for all ${allTokens.length} tokens...`);
+    const currentPricesFromAPI = await getAssetPrices(allTokens, folioConfig.chainId, await time.latest());
+
+    // Build price records for all tokens
+    const prices: Record<string, { snapshotPrice: number }> = {}; // Simulated prices for rebalancing
+    const currentPrices: Record<string, { snapshotPrice: number }> = {}; // Current API prices for value calculations
     const priceChanges: { symbol: string; historical: number; simulated: number; change: string }[] = [];
 
+    // Now build the complete price records
     for (let i = 0; i < allTokens.length; i++) {
       const token = allTokens[i];
       const proposalIndex = proposalTokens.indexOf(token);
 
+      // Get current price from API (handling case mismatches)
+      const currentPriceEntry = Object.entries(currentPricesFromAPI).find(
+        ([addr, _]) => addr.toLowerCase() === token.toLowerCase(),
+      );
+      currentPrices[token] = currentPriceEntry ? currentPriceEntry[1] : { snapshotPrice: 0 };
+
       if (proposalIndex >= 0) {
-        // Use simulated price for tokens in the proposal
+        // Use simulated price for rebalancing
         prices[token] = simulatedPriceData[proposalIndex.toString()];
         const historicalPrice = historicalPrices[proposalIndex];
         const priceChange = ((prices[token].snapshotPrice / historicalPrice - 1) * 100).toFixed(2);
@@ -369,14 +381,9 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
           change: priceChange,
         });
       } else {
-        // For tokens not in proposal, fetch current price (shouldn't happen normally)
-        const currentPrices = await getAssetPrices([token], folioConfig.chainId, await time.latest());
-        // Handle potential address casing mismatches from API
-        const priceEntry = Object.entries(currentPrices).find(
-          ([addr, _]) => addr.toLowerCase() === token.toLowerCase(),
-        );
-        prices[token] = priceEntry ? priceEntry[1] : { snapshotPrice: 0 };
-        if (!priceEntry) {
+        // For tokens not in proposal, use current price for simulation too
+        prices[token] = currentPrices[token];
+        if (!currentPriceEntry) {
           console.log(`   Warning: No price found for ${token}`);
         }
       }
@@ -493,7 +500,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     console.log(`\n⚡ Running rebalance simulation...`);
 
     // Display price changes
-    console.log(`\n📈 Simulated price changes (${(marketVolatility * 100).toFixed(0)}% vol)`);
+    console.log(`\n📈 Simulated price changes ${governanceDelayDays} days from now:`);
     for (const priceChange of priceChanges) {
       console.log(
         `   ${priceChange.symbol}: $${priceChange.historical.toFixed(2)} → $${priceChange.simulated.toFixed(2)} (${priceChange.change}%)`,
@@ -512,6 +519,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       0.9, // finalStageAt
       false, // debug
       priceDeviationValue, // pass the configurable price deviation
+      currentPrices, // pass current prices for value calculations
       true, // useSimulatedPrices - we're using simulated prices from proposal
       governanceDelayDays, // pass the calculated governance delay
     );
@@ -521,16 +529,37 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     // Calculate and display final metrics
     console.log(`\n📊 Final Rebalance Metrics:`);
 
-    // Get weight control setting
-    const [weightControl] = await folio.rebalanceControl();
+    // Convert D27{tok/BU} weights to D18{1} percentages using getTargetBasket
+    // We need to create WeightRange objects and get decimals for all tokens
+    const allTokenDecimals: bigint[] = [];
+    for (const token of allTokens) {
+      const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
+      allTokenDecimals.push(await tokenContract.decimals());
+    }
 
-    // Need to normalize targetBasketRec from D27{tok/BU} to D18{1} percentages for comparison
-    const targetBasketArray = allTokens.map((token) => targetBasketRec[token] || 0n);
-    const totalTargetWeight = targetBasketArray.reduce((a, b) => a + b, 0n);
+    const targetWeightRanges = allTokens.map((token) => {
+      const weight = targetBasketRec[token] || 0n;
+      return {
+        low: weight,
+        spot: weight,
+        high: weight,
+      };
+    });
+
+    const allTokenPrices = allTokens.map((token) => priceLookup.getPrice(token));
+
+    // Use getTargetBasket from open-auction to properly convert weights to percentages
+    const { getTargetBasket } = await import("../src/open-auction");
+    const normalizedTargetArray = getTargetBasket(
+      targetWeightRanges,
+      allTokenPrices,
+      allTokenDecimals,
+      false, // debug
+    );
+
     const normalizedTargetRec: Record<string, bigint> = {};
     allTokens.forEach((token, i) => {
-      normalizedTargetRec[token] =
-        totalTargetWeight > 0n ? (targetBasketArray[i] * 10n ** 18n) / totalTargetWeight : 0n;
+      normalizedTargetRec[token] = normalizedTargetArray[i];
     });
 
     // Calculate metrics
@@ -539,24 +568,25 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       folio,
       allTokens,
       normalizedTargetRec,
-      prices,
-      weightControl,
-      folioConfig.chainId,
+      prices, // Use simulated prices that were active during auctions
     );
 
     // Log the results
     logPercentages(`🔍 Final    `, metrics.finalTargetBasketRec, allTokens);
     logPercentages(`🎯 Target   `, normalizedTargetRec, allTokens);
 
-    if (metrics.totalError > 0.0001) {
+    // totalError is now directly a percentage (0-100)
+    const errorPercentage = metrics.totalError;
+
+    if (errorPercentage > 0.01) {
       // 0.01% = 1 basis point
-      console.log(`⚠️  Error     ${(metrics.totalError * 100).toFixed(4)}%`);
-      if (metrics.totalError > 0.01) {
+      console.log(`⚠️  Error     ${errorPercentage.toFixed(4)}%`);
+      if (errorPercentage > 1) {
         // 1% error threshold
         console.log(`\n⚠️  Warning: Total error exceeds 1%`);
       }
     } else {
-      console.log(`✅ Error     ${(metrics.totalError * 100).toFixed(4)}%`);
+      console.log(`✅ Error     ${errorPercentage.toFixed(4)}%`);
     }
 
     console.log(

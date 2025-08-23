@@ -229,20 +229,18 @@ export async function calculateRebalanceMetrics(
   orderedTokens: string[],
   targetBasketRec: Record<string, bigint>,
   pricesRec: Record<string, { snapshotPrice: number }>,
-  weightControl: boolean,
-  chainId?: number
 ) {
   // Get final balances
   const [finalTokens, balancesAfterFinal] = await folio.totalAssets();
   const balancesAfterFinalRec: Record<string, bigint> = {};
   const decimalsRec: Record<string, bigint> = {};
-  
+
   // Get decimals for all tokens
   for (const token of orderedTokens) {
     const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
     decimalsRec[token] = await tokenContract.decimals();
   }
-  
+
   // Map balances to record
   for (let i = 0; i < finalTokens.length; i++) {
     balancesAfterFinalRec[finalTokens[i]] = balancesAfterFinal[i];
@@ -254,21 +252,21 @@ export async function calculateRebalanceMetrics(
   }
 
   // Get final prices if needed (for NATIVE mode)
-  const finalPricesRec = weightControl 
-    ? await getAssetPrices(orderedTokens, chainId || 1, await hre.ethers.provider.getBlock("latest").then(b => b!.timestamp))
-    : pricesRec;
+  // Note: In simulations, we're in the future so we can't fetch historical prices
+  // Just use the prices we already have
+  const finalPricesRec = pricesRec;
 
   // Calculate total value and individual token values
   let totalValueAfterFinal = 0;
   const finalTokenValuesRec: Record<string, number> = {};
-  
+
   // Create case-insensitive lookup for prices
   const priceKeys = Object.keys(finalPricesRec);
   const lowercaseToPriceKey: Record<string, string> = {};
   for (const key of priceKeys) {
     lowercaseToPriceKey[key.toLowerCase()] = key;
   }
-  
+
   orderedTokens.forEach((token: string) => {
     const priceKey = lowercaseToPriceKey[token.toLowerCase()];
     const price = priceKey && finalPricesRec[priceKey] ? finalPricesRec[priceKey].snapshotPrice : 0;
@@ -285,24 +283,31 @@ export async function calculateRebalanceMetrics(
     finalTargetBasketRec[token] = bn(((finalTokenValuesRec[token] / totalValueAfterFinal) * 10 ** 18).toString());
   });
 
-  // Calculate error
-  const totalErrorSquared = orderedTokens
-    .map((token: string) => {
-      const diff =
-        targetBasketRec[token] > finalTargetBasketRec[token]
-          ? targetBasketRec[token] - finalTargetBasketRec[token]
-          : finalTargetBasketRec[token] - targetBasketRec[token];
-
-      return (diff * diff) / 10n ** 18n;
-    })
-    .reduce((a: bigint, b: bigint) => a + b, 0n);
-
-  const totalError = Math.sqrt(Number(totalErrorSquared) / 10 ** 18);
+  // Calculate what fraction of value is correctly allocated
+  // For each token, the "correct" amount is the minimum of what we have vs what we want
+  let correctlyAllocatedValue = 0;
+  
+  orderedTokens.forEach((token: string) => {
+    const targetFraction = Number(targetBasketRec[token]) / 1e18;
+    const actualFraction = Number(finalTargetBasketRec[token]) / 1e18;
+    
+    // The correctly allocated fraction for this token is the minimum of target and actual
+    const correctFraction = Math.min(targetFraction, actualFraction);
+    
+    // Add this token's correctly allocated value to the total
+    correctlyAllocatedValue += correctFraction * totalValueAfterFinal;
+  });
+  
+  // The fraction of total value that is correctly allocated (0 to 1)
+  const fractionCorrect = totalValueAfterFinal > 0 ? correctlyAllocatedValue / totalValueAfterFinal : 0;
+  
+  // Convert to error percentage (0% = perfect, 100% = completely wrong)
+  const totalError = (1 - fractionCorrect) * 100;
 
   return {
     finalTargetBasketRec,
     totalError,
-    totalValueAfterFinal
+    totalValueAfterFinal,
   };
 }
 
@@ -317,25 +322,21 @@ export function createPriceLookup(pricesRec: Record<string, { snapshotPrice: num
   for (const key of priceKeys) {
     lowercaseToPriceKey[key.toLowerCase()] = key;
   }
-  
+
   const getPrice = (token: string): number => {
     const priceKey = lowercaseToPriceKey[token.toLowerCase()];
     return priceKey && pricesRec[priceKey] ? pricesRec[priceKey].snapshotPrice : 0;
   };
-  
+
   const hasPrice = (token: string): boolean => {
     const priceKey = lowercaseToPriceKey[token.toLowerCase()];
     return !!(priceKey && pricesRec[priceKey]);
   };
-  
+
   return { lowercaseToPriceKey, getPrice, hasPrice };
 }
 
-export function logPercentages(
-  label: string,
-  targetBasketWeights: Record<string, bigint>,
-  orderedTokens: string[]
-) {
+export function logPercentages(label: string, targetBasketWeights: Record<string, bigint>, orderedTokens: string[]) {
   const percentageStrings = orderedTokens.map((token) => {
     const weight = targetBasketWeights[token] || 0n;
     const percentage = (Number(weight) / Number(10n ** 18n)) * 100;
@@ -350,32 +351,32 @@ export function logPercentages(
 export function convertProposalPricesToUSD(
   proposalPrices: { low: bigint; high: bigint }[],
   decimals: bigint[],
-  tokenSymbols?: string[]
+  tokenSymbols?: string[],
 ): number[] {
   return proposalPrices.map((priceRange, i) => {
     // Convert both prices to USD/wholeTok first
     const tokPerWholeTok = 10n ** decimals[i];
     const nanoUSDPerUSD = 10n ** 9n;
     const D27 = 10n ** 27n;
-    
+
     // Convert low and high prices
     // First multiply to preserve precision, then divide by combined divisor
-    const divisor = D27 * nanoUSDPerUSD / tokPerWholeTok;
+    const divisor = (D27 * nanoUSDPerUSD) / tokPerWholeTok;
     const lowPriceUSD = Number(priceRange.low) / Number(divisor);
     const highPriceUSD = Number(priceRange.high) / Number(divisor);
-    
+
     // Check for zero prices which indicate invalid proposal data
     if (lowPriceUSD === 0 || highPriceUSD === 0) {
       const tokenIdentifier = tokenSymbols?.[i] ? `${tokenSymbols[i]} (index ${i})` : `index ${i}`;
       throw new Error(
         `Invalid proposal data: Token at ${tokenIdentifier} has zero price. ` +
-        `Low: ${priceRange.low.toString()}, High: ${priceRange.high.toString()}`
+          `Low: ${priceRange.low.toString()}, High: ${priceRange.high.toString()}`,
       );
     }
-    
+
     // Use geometric mean: sqrt(low * high)
     const geometricMean = Math.sqrt(lowPriceUSD * highPriceUSD);
-    
+
     return geometricMean;
   });
 }
@@ -392,14 +393,14 @@ export function simulateMarketPrices(
   historicalPrices: number[],
   volatility: number = 0.2, // 20% annual volatility default
   daysElapsed: number = 5,
-  drift: number = 0
+  drift: number = 0,
 ): Record<string, { snapshotPrice: number }> {
   const result: Record<string, { snapshotPrice: number }> = {};
-  
+
   // Convert annual parameters to daily
   const dailyVolatility = volatility / Math.sqrt(365);
   const dailyDrift = drift / 365;
-  
+
   historicalPrices.forEach((price, i) => {
     // Generate random walk for each day
     let simulatedPrice = price;
@@ -408,18 +409,18 @@ export function simulateMarketPrices(
       const u1 = Math.random();
       const u2 = Math.random();
       const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-      
+
       // Apply geometric Brownian motion
       const dailyReturn = dailyDrift + dailyVolatility * z;
       simulatedPrice = simulatedPrice * (1 + dailyReturn);
     }
-    
+
     // Ensure price doesn't go negative or too extreme
     simulatedPrice = Math.max(simulatedPrice, price * 0.5); // Min 50% of original
     simulatedPrice = Math.min(simulatedPrice, price * 2.0); // Max 200% of original
-    
+
     result[i.toString()] = { snapshotPrice: simulatedPrice };
   });
-  
+
   return result;
 }
