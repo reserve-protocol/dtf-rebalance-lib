@@ -6,7 +6,7 @@ import { expect } from "chai";
 import { Contract } from "ethers";
 
 import { Folio as FolioConfig } from "../src/types";
-import { getAssetPrices, whileImpersonating, toPlainObject } from "./utils";
+import { getAssetPrices, whileImpersonating, toPlainObject, createPriceLookup } from "./utils";
 import { AuctionMetrics, AuctionRound, getOpenAuction, getTargetBasket } from "../src/open-auction";
 import { getStartRebalance } from "../src/start-rebalance";
 import { PriceRange, WeightRange } from "../src/types";
@@ -35,6 +35,8 @@ export async function runRebalance(
   finalStageAt: number,
   debug?: boolean,
   priceDeviation: number = 0.5, // default to MEDIUM setting
+  useSimulatedPrices: boolean = false, // default to false for existing tests
+  governanceDelayDays?: number, // optional governance delay in days
 ) {
   const { folio, folioLensTyped } = contracts;
   const { bidder, rebalanceManager, auctionLauncher, admin } = signers;
@@ -91,17 +93,28 @@ export async function runRebalance(
   });
   const decimalsArray = orderedTokens.map((token) => allDecimalsRec[token]);
 
-  // Normalize target basket to ensure weights sum to 1e18
-  const targetBasketArray = orderedTokens.map((token) => targetBasket[token] || 0n);
-  const totalTargetWeight = targetBasketArray.reduce((a, b) => a + b, 0n);
-  const normalizedTargetBasket = targetBasketArray.map((weight) =>
-    totalTargetWeight > 0n ? (weight * 10n ** 18n) / totalTargetWeight : 0n,
+  // Convert D27{tok/BU} weights to D18{1} percentages using getTargetBasket
+  // We need to create WeightRange objects from the raw weights
+  const targetWeightRanges = orderedTokens.map((token) => {
+    const weight = targetBasket[token] || 0n;
+    return {
+      low: weight,
+      spot: weight,
+      high: weight,
+    };
+  });
+  
+  // Use getTargetBasket to properly convert weights to percentages
+  const normalizedTargetBasket = getTargetBasket(
+    targetWeightRanges,
+    pricesArray,
+    decimalsArray,
+    debug
   );
 
   if (debug) {
-    console.log("Target basket total weight:", totalTargetWeight.toString());
     console.log(
-      "Normalized weights:",
+      "Normalized target basket:",
       normalizedTargetBasket.map((w) => w.toString()),
     );
   }
@@ -119,8 +132,10 @@ export async function runRebalance(
     debug,
   );
 
-  // advance time as-if startRebalance() call was stuck in governance for 5 days
-  await hre.network.provider.send("evm_setNextBlockTimestamp", [(await time.latest()) + 5 * 24 * 60 * 60]);
+  // advance time as-if startRebalance() call was stuck in governance
+  const delayDays = governanceDelayDays ?? 5; // Use provided delay or default to 5 days
+  const delaySeconds = Math.floor(delayDays * 24 * 60 * 60);
+  await hre.network.provider.send("evm_setNextBlockTimestamp", [(await time.latest()) + delaySeconds]);
   await hre.network.provider.send("evm_mine", []);
 
   // start rebalance
@@ -169,21 +184,21 @@ export async function runRebalance(
   const getBidValue = (
     bid: any[],
     pricesRec: Record<string, { snapshotPrice: number }>,
-    priceLookup: Record<string, string>,
   ): number => {
     const sellTokenAddr = bid[0];
     const buyTokenAddr = bid[1];
-
-    const sellPriceKey = priceLookup[sellTokenAddr.toLowerCase()];
-    const buyPriceKey = priceLookup[buyTokenAddr.toLowerCase()];
-
-    const sellTokenPrice = sellPriceKey && pricesRec[sellPriceKey] ? pricesRec[sellPriceKey].snapshotPrice : 0;
-    const buyTokenPrice = buyPriceKey && pricesRec[buyPriceKey] ? pricesRec[buyPriceKey].snapshotPrice : 0;
+    
+    const priceLookup = createPriceLookup(pricesRec);
+    const sellTokenPrice = priceLookup.getPrice(sellTokenAddr);
+    const buyTokenPrice = priceLookup.getPrice(buyTokenAddr);
 
     const sellValue = (Number(bid[2]) / Number(10n ** (allDecimalsRec[sellTokenAddr] || 18n))) * sellTokenPrice;
     const buyValue = (Number(bid[3]) / Number(10n ** (allDecimalsRec[buyTokenAddr] || 18n))) * buyTokenPrice;
     return buyValue > sellValue ? sellValue : buyValue;
   };
+
+  // Track total value rebalanced across all auctions
+  let totalRebalancedValue = 0;
 
   const doAuction = async (auctionNumber: number): Promise<AuctionMetrics> => {
     // make sure all tokens are in the basket
@@ -198,7 +213,10 @@ export async function runRebalance(
     });
 
     // fetch prices to use for auction
-    const auctionPricesRec = await getAssetPrices(orderedTokens, folioConfig.chainId, await time.latest());
+    // Use simulated prices if provided, otherwise fetch current market prices
+    const auctionPricesRec = useSimulatedPrices 
+      ? rebalancePricesRec  // Use the same simulated prices passed in
+      : await getAssetPrices(orderedTokens, folioConfig.chainId, await time.latest());
 
     // Create case-insensitive lookup for auction prices
     const auctionPriceKeys = Object.keys(auctionPricesRec);
@@ -251,27 +269,47 @@ export async function runRebalance(
     orderedTokens.forEach((token: string, idx: number) => {
       const currentIndex = rebalanceState.tokens.indexOf(token);
 
-      weights.push(rebalanceState.weights[currentIndex]);
-      initialPrices.push(startRebalanceArgs.prices[idx]);
-      amts.push(amtsFromFolio[currentIndex]);
-      inRebalance.push(rebalanceState.inRebalance[currentIndex]);
+      if (currentIndex === -1) {
+        // Token not in rebalance state - handle as new token
+        console.log(`      Token ${token} not found in rebalance state, treating as new token`);
+        console.log(`      Weight for ${token}:`, startRebalanceArgs.weights[idx]);
+        weights.push(startRebalanceArgs.weights[idx]);
+        initialPrices.push(startRebalanceArgs.prices[idx]);
+        amts.push(0n); // New token has no balance
+        inRebalance.push(true); // We want to rebalance into it
+      } else {
+        // Existing logic for tokens in rebalance state
+        weights.push(rebalanceState.weights[currentIndex]);
+        initialPrices.push(startRebalanceArgs.prices[idx]);
+        amts.push(amtsFromFolio[currentIndex]);
+        inRebalance.push(rebalanceState.inRebalance[currentIndex]);
+      }
       const auctionPriceKey = lowercaseToAuctionPriceKey[token.toLowerCase()];
       auctionPrices.push(
         auctionPriceKey && auctionPricesRec[auctionPriceKey] ? auctionPricesRec[auctionPriceKey].snapshotPrice : 0,
       );
 
       originalWeights.push(startRebalanceArgs.weights[idx]);
-      originalPrices.push(
-        weightControl
-          ? pricesArray[idx]
-          : auctionPriceKey && auctionPricesRec[auctionPriceKey]
-            ? auctionPricesRec[auctionPriceKey].snapshotPrice
-            : 0,
-      );
+      // Use historical prices from proposal for target basket calculation
+      // This ensures basket price difference reflects price movements during governance delay
+      const historicalPrice = startRebalanceArgs.prices[idx];
+      // Convert from D27{nanoUSD/tok} to USD/wholeTok
+      const tokDecimals = allDecimalsRec[token];
+      const nanoUSDPerUSD = 10n ** 9n;
+      const D27 = 10n ** 27n;
+      // Correct formula: USD/wholeTok = D27{nanoUSD/tok} * 10^tokenDecimals / (10^27 * 10^9)
+      const divisor = D27 * nanoUSDPerUSD / (10n ** tokDecimals);
+      const lowPriceUSD = Number(historicalPrice.low) / Number(divisor);
+      const highPriceUSD = Number(historicalPrice.high) / Number(divisor);
+      // Use geometric mean for consistency with convertProposalPricesToUSD
+      originalPrices.push(Math.sqrt(lowPriceUSD * highPriceUSD));
     });
 
     // which target basket we pass to getOpenAuction() depends on TRACKING vs NATIVE weightControl
-    const auctionTargetBasket = getTargetBasket(originalWeights, originalPrices, decimalsArray, debug);
+    // TRACKING (weightControl = false): use CURRENT auction prices
+    // NATIVE (weightControl = true): use HISTORICAL prices from proposal
+    const targetBasketPrices = weightControl ? originalPrices : auctionPrices;
+    const auctionTargetBasket = getTargetBasket(originalWeights, targetBasketPrices, decimalsArray, debug);
 
     const [openAuctionArgsLocal, auctionMetrics] = getOpenAuction(
       {
@@ -331,11 +369,11 @@ export async function runRebalance(
     let allBids = toPlainObject(await folioLensTyped.getAllBids(await folio.getAddress(), auctionId));
     allBids.sort(
       (a: any, b: any) =>
-        getBidValue(b, auctionPricesRec, lowercaseToAuctionPriceKey) -
-        getBidValue(a, auctionPricesRec, lowercaseToAuctionPriceKey),
+        getBidValue(b, auctionPricesRec) -
+        getBidValue(a, auctionPricesRec),
     );
 
-    while (allBids.length > 0 && getBidValue(allBids[0], auctionPricesRec, lowercaseToAuctionPriceKey) >= 1) {
+    while (allBids.length > 0 && getBidValue(allBids[0], auctionPricesRec) >= 1) {
       const bid = allBids[0];
 
       const buyTokenContract = mockedTokensRec[bid[1]] as unknown as Contract;
@@ -359,17 +397,20 @@ export async function runRebalance(
           sellPriceKey && auctionPricesRec[sellPriceKey] ? auctionPricesRec[sellPriceKey].snapshotPrice : 0;
         const buyPrice = buyPriceKey && auctionPricesRec[buyPriceKey] ? auctionPricesRec[buyPriceKey].snapshotPrice : 0;
 
+        const sellValue = (Number(bid[2]) * sellPrice) / Number(10n ** allDecimalsRec[bid[0]]);
+        totalRebalancedValue += sellValue; // Accumulate total traded value
+
         console.log(
           "      🔄 ",
-          `${sellSymbol} ($${((Number(bid[2]) * sellPrice) / Number(10n ** allDecimalsRec[bid[0]])).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) -> ${buySymbol} ($${((Number(bid[3]) * buyPrice) / Number(10n ** allDecimalsRec[bid[1]])).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
+          `${sellSymbol} ($${sellValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) -> ${buySymbol} ($${((Number(bid[3]) * buyPrice) / Number(10n ** allDecimalsRec[bid[1]])).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
         );
       });
 
       allBids = toPlainObject(await folioLensTyped.getAllBids(await folio.getAddress(), auctionId));
       allBids.sort(
         (a: any, b: any) =>
-          getBidValue(b, auctionPricesRec, lowercaseToAuctionPriceKey) -
-          getBidValue(a, auctionPricesRec, lowercaseToAuctionPriceKey),
+          getBidValue(b, auctionPricesRec) -
+          getBidValue(a, auctionPricesRec),
       );
     }
 
@@ -401,4 +442,6 @@ export async function runRebalance(
     finalAuctionMetrics = await doAuction(3);
   }
   expect(finalAuctionMetrics.target).to.equal(1);
+  
+  return totalRebalancedValue; // Return the total rebalanced value
 }

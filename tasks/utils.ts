@@ -229,7 +229,8 @@ export async function calculateRebalanceMetrics(
   orderedTokens: string[],
   targetBasketRec: Record<string, bigint>,
   pricesRec: Record<string, { snapshotPrice: number }>,
-  weightControl: boolean
+  weightControl: boolean,
+  chainId?: number
 ) {
   // Get final balances
   const [finalTokens, balancesAfterFinal] = await folio.totalAssets();
@@ -254,7 +255,7 @@ export async function calculateRebalanceMetrics(
 
   // Get final prices if needed (for NATIVE mode)
   const finalPricesRec = weightControl 
-    ? await getAssetPrices(orderedTokens, 1, await hre.ethers.provider.getBlock("latest").then(b => b!.timestamp))
+    ? await getAssetPrices(orderedTokens, chainId || 1, await hre.ethers.provider.getBlock("latest").then(b => b!.timestamp))
     : pricesRec;
 
   // Calculate total value and individual token values
@@ -305,6 +306,31 @@ export async function calculateRebalanceMetrics(
   };
 }
 
+/**
+ * Create a case-insensitive price lookup from a price record
+ * @param pricesRec Price record with token addresses as keys
+ * @returns Object with lowercase mapping and lookup function
+ */
+export function createPriceLookup(pricesRec: Record<string, { snapshotPrice: number }>) {
+  const priceKeys = Object.keys(pricesRec);
+  const lowercaseToPriceKey: Record<string, string> = {};
+  for (const key of priceKeys) {
+    lowercaseToPriceKey[key.toLowerCase()] = key;
+  }
+  
+  const getPrice = (token: string): number => {
+    const priceKey = lowercaseToPriceKey[token.toLowerCase()];
+    return priceKey && pricesRec[priceKey] ? pricesRec[priceKey].snapshotPrice : 0;
+  };
+  
+  const hasPrice = (token: string): boolean => {
+    const priceKey = lowercaseToPriceKey[token.toLowerCase()];
+    return !!(priceKey && pricesRec[priceKey]);
+  };
+  
+  return { lowercaseToPriceKey, getPrice, hasPrice };
+}
+
 export function logPercentages(
   label: string,
   targetBasketWeights: Record<string, bigint>,
@@ -316,4 +342,84 @@ export function logPercentages(
     return percentage === 0 ? "00.00%" : `${percentage.toFixed(2)}%`;
   });
   console.log(`${label} [${percentageStrings.join(", ")}]`);
+}
+
+/**
+ * Convert proposal prices from D27{nanoUSD/tok} to USD/wholeTok format
+ */
+export function convertProposalPricesToUSD(
+  proposalPrices: { low: bigint; high: bigint }[],
+  decimals: bigint[],
+  tokenSymbols?: string[]
+): number[] {
+  return proposalPrices.map((priceRange, i) => {
+    // Convert both prices to USD/wholeTok first
+    const tokPerWholeTok = 10n ** decimals[i];
+    const nanoUSDPerUSD = 10n ** 9n;
+    const D27 = 10n ** 27n;
+    
+    // Convert low and high prices
+    // First multiply to preserve precision, then divide by combined divisor
+    const divisor = D27 * nanoUSDPerUSD / tokPerWholeTok;
+    const lowPriceUSD = Number(priceRange.low) / Number(divisor);
+    const highPriceUSD = Number(priceRange.high) / Number(divisor);
+    
+    // Check for zero prices which indicate invalid proposal data
+    if (lowPriceUSD === 0 || highPriceUSD === 0) {
+      const tokenIdentifier = tokenSymbols?.[i] ? `${tokenSymbols[i]} (index ${i})` : `index ${i}`;
+      throw new Error(
+        `Invalid proposal data: Token at ${tokenIdentifier} has zero price. ` +
+        `Low: ${priceRange.low.toString()}, High: ${priceRange.high.toString()}`
+      );
+    }
+    
+    // Use geometric mean: sqrt(low * high)
+    const geometricMean = Math.sqrt(lowPriceUSD * highPriceUSD);
+    
+    return geometricMean;
+  });
+}
+
+/**
+ * Simulate market price movements using geometric Brownian motion
+ * @param historicalPrices Original prices from the proposal
+ * @param volatility Annual volatility (e.g., 0.3 for 30%)
+ * @param daysElapsed Number of days elapsed (e.g., 5 for governance delay)
+ * @param drift Annual drift rate (default 0)
+ * @returns Simulated prices with market movements
+ */
+export function simulateMarketPrices(
+  historicalPrices: number[],
+  volatility: number = 0.2, // 20% annual volatility default
+  daysElapsed: number = 5,
+  drift: number = 0
+): Record<string, { snapshotPrice: number }> {
+  const result: Record<string, { snapshotPrice: number }> = {};
+  
+  // Convert annual parameters to daily
+  const dailyVolatility = volatility / Math.sqrt(365);
+  const dailyDrift = drift / 365;
+  
+  historicalPrices.forEach((price, i) => {
+    // Generate random walk for each day
+    let simulatedPrice = price;
+    for (let day = 0; day < daysElapsed; day++) {
+      // Generate random normal distribution (Box-Muller transform)
+      const u1 = Math.random();
+      const u2 = Math.random();
+      const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+      
+      // Apply geometric Brownian motion
+      const dailyReturn = dailyDrift + dailyVolatility * z;
+      simulatedPrice = simulatedPrice * (1 + dailyReturn);
+    }
+    
+    // Ensure price doesn't go negative or too extreme
+    simulatedPrice = Math.max(simulatedPrice, price * 0.5); // Min 50% of original
+    simulatedPrice = Math.min(simulatedPrice, price * 2.0); // Max 200% of original
+    
+    result[i.toString()] = { snapshotPrice: simulatedPrice };
+  });
+  
+  return result;
 }
