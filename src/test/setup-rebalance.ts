@@ -79,7 +79,6 @@ export async function setupRebalance(
 
   const [weightControl] = await folio.rebalanceControl();
 
-  // TODO snapshotPrice
   const pricesArray = tokens.map((token: string) => rebalancePricesRec[token.toLowerCase()].snapshotPrice);
   const decimalsArray = tokens.map((token: string) => allDecimalsRec[token]);
   const targetBasketArray = tokens.map((token: string) => targetBasketRec[token]);

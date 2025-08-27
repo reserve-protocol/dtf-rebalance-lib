@@ -35,7 +35,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
       bidder = contractsAndSigners.bidder;
       rebalanceManager = contractsAndSigners.rebalanceManager;
       auctionLauncher = contractsAndSigners.auctionLauncher;
-      
+
       // Capture initial timestamp for price fetching
       initialTimestamp = await time.latest();
     });
@@ -57,10 +57,21 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
 
         const pricesRecRaw = await getAssetPrices(orderedTokens, folioConfig.chainId, initialTimestamp);
 
-        // Normalize price records to lowercase keys
+        // Apply random price deviation for this round (between -10% and +10%)
+        const maxPriceDeviation = 0.1; // 10% max deviation
+        const priceDeviationFactors: Record<string, number> = {};
+        orderedTokens.forEach((token: string) => {
+          // Generate random deviation factor between 0.9 and 1.1
+          priceDeviationFactors[token.toLowerCase()] = 1 - maxPriceDeviation + Math.random() * (2 * maxPriceDeviation);
+        });
+
+        // Normalize price records to lowercase keys and apply deviation
         const pricesRec: Record<string, { snapshotPrice: number }> = {};
         for (const [token, price] of Object.entries(pricesRecRaw)) {
-          pricesRec[token.toLowerCase()] = price;
+          const factor = priceDeviationFactors[token.toLowerCase()] || 1;
+          pricesRec[token.toLowerCase()] = {
+            snapshotPrice: price.snapshotPrice * factor,
+          };
         }
         const [tokens, assets] = await folio.totalAssets();
 
@@ -122,6 +133,8 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
           false, // debug
         );
 
+        const auctionPriceDeviation = 0.1 + Math.random() * 0.1;
+
         // Execute the auctions
         await doAuctions(
           hre,
@@ -134,6 +147,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
           initialState,
           0.9, // finalStageAt
           false, // debug
+          auctionPriceDeviation, // Pass random auction deviation
         );
       });
     }

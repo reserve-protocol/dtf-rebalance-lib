@@ -21,6 +21,7 @@ export async function doAuctions(
   initialState: RebalanceInitialState,
   finalStageAt: number,
   debug?: boolean,
+  auctionPriceDeviation: number = 0.02,
 ) {
   const { folio, folioLensTyped } = contracts;
   const { bidder, auctionLauncher } = signers;
@@ -180,30 +181,33 @@ export async function doAuctions(
       }
     }
 
-    // TODO deviate auctionPrices
-    //
+    // Apply random price deviation to auction prices
+    // Each price gets a random deviation within ±auctionPriceDeviation
+    const deviatedAuctionPrices = auctionPrices.map((price: number) => {
+      // Generate random factor between (1 - deviation) and (1 + deviation)
+      const factor = 1 - auctionPriceDeviation + Math.random() * (2 * auctionPriceDeviation);
+      return price * factor;
+    });
 
     // Build decimalsArray in rebalanceState.tokens order
     const decimalsArrayRebalanceOrder = rebalanceState.tokens.map((token: string) => allDecimalsRec[token]);
 
     // Build initialAmountsArray in rebalanceState.tokens order
     // Use the amounts captured BEFORE any auctions started
-    const initialAssetsArrayRebalanceOrder = rebalanceState.tokens.map(
-      (token: string) => {
-        const idx = initialTokens.findIndex((t: string) => t.toLowerCase() === token.toLowerCase());
-        if (idx === -1) {
-          throw new Error(`Token ${token} from rebalanceState not found in initialTokens`);
-        }
-        return initialAssets[idx];
-      },
-    );
+    const initialAssetsArrayRebalanceOrder = rebalanceState.tokens.map((token: string) => {
+      const idx = initialTokens.findIndex((t: string) => t.toLowerCase() === token.toLowerCase());
+      if (idx === -1) {
+        throw new Error(`Token ${token} from rebalanceState not found in initialTokens`);
+      }
+      return initialAssets[idx];
+    });
 
     // which target basket we pass to getOpenAuction() depends on TRACKING vs NATIVE weightControl
-    // TRACKING (weightControl = false): use CURRENT auction prices
+    // TRACKING (weightControl = false): use CURRENT auction prices (with deviation)
     // NATIVE (weightControl = true): use HISTORICAL prices from proposal
     const auctionTargetBasket = getTargetBasket(
       originalWeights,
-      weightControl ? rebalancePrices : auctionPrices,
+      weightControl ? rebalancePrices : deviatedAuctionPrices,
       decimalsArrayRebalanceOrder,
       debug,
     );
@@ -227,8 +231,8 @@ export async function doAuctions(
       auctionTargetBasket,
       assets,
       decimalsArrayRebalanceOrder,
-      auctionPrices,
-      auctionPrices.map((_: number) => 0.02),
+      deviatedAuctionPrices,
+      deviatedAuctionPrices.map((_: number) => auctionPriceDeviation),
       finalStageAt,
       debug,
     );
