@@ -257,17 +257,6 @@ export const getOpenAuction = (
     })
     .reduce((a, b) => a.add(b), ZERO)
     .div(shareValue);
-    
-  if (debug && ejectionIndices.length > 0) {
-    console.log("      Ejection calculation:");
-    console.log("        ejectionIndices:", ejectionIndices);
-    ejectionIndices.forEach(i => {
-      console.log(`        Token ${i}: assets=${_assets[i].toString()}, decimals=${_decimals[i].toString()}`);
-      console.log(`        Token ${i}: folio=${folio[i].toString()}, price=${prices[i].toString()}, value=${folio[i].mul(prices[i]).toString()}`);
-    });
-    console.log("        shareValue:", shareValue.toString());
-    console.log("        Total folio value:", folio.map((f, i) => f.mul(prices[i])).reduce((a, b) => a.add(b)).toString());
-  }
 
   // ================================================================
 
@@ -361,10 +350,10 @@ export const getOpenAuction = (
 
     // if the ejections are mostly what's left, target JUST the ejection if that puts us at <100%
     let ejectionTarget = progression.add(portionBeingEjected.mul(1.1)); // buy up to 10% extra
-    if (ejectionTarget.lt(ONE)) {
+    if (ejectionTarget.gt(target) && ejectionTarget.lt(ONE)) {
       target = ejectionTarget;
     }
-    
+
     if (debug) {
       console.log("      EJECT round detected:");
       console.log("        portionBeingEjected:", portionBeingEjected.toString());
@@ -397,13 +386,10 @@ export const getOpenAuction = (
   const newLimits = {
     low: bn(spotLimit.sub(spotLimit.mul(delta)).mul(D18d)),
     spot: bn(spotLimit.mul(D18d)),
-    high: bn(spotLimit.add(spotLimit.mul(delta)).mul(D18d)),
-  };
 
-  // hold some surpluses aside if ejecting
-  if (round == AuctionRound.EJECT) {
-    newLimits.high += newLimits.high / 10n;
-  }
+    // hold non-eject surpluses aside if ejecting
+    high: round == AuctionRound.EJECT ? rebalance.limits.high : bn(spotLimit.add(spotLimit.mul(delta)).mul(D18d)),
+  };
 
   // low
   if (newLimits.low < rebalance.limits.low) {
@@ -458,18 +444,18 @@ export const getOpenAuction = (
           .mul(decimalScale[i]),
       ),
       spot: bn(idealWeight.mul(D9d).mul(decimalScale[i])),
-      high: bn(
-        idealWeight
-          .mul(ONE.add(delta).div(actualLimits.high.div(actualLimits.spot))) // add remaining delta into weight
-          .mul(D9d)
-          .mul(decimalScale[i]),
-      ),
-    };
 
-    // hold some surpluses aside if ejecting
-    if (round == AuctionRound.EJECT) {
-      newWeightsD27.high += newWeightsD27.high / 10n;
-    }
+      high:
+        // hold surpluses aside if ejecting
+        round == AuctionRound.EJECT
+          ? weightRange.high
+          : bn(
+              idealWeight
+                .mul(ONE.add(delta).div(actualLimits.high.div(actualLimits.spot))) // add remaining delta into weight
+                .mul(D9d)
+                .mul(decimalScale[i]),
+            ),
+    };
 
     if (newWeightsD27.low < weightRange.low) {
       newWeightsD27.low = weightRange.low;
@@ -502,8 +488,8 @@ export const getOpenAuction = (
 
   // D27{nanoUSD/tok}
   const newPrices = rebalance.initialPrices.map((initialPrice, i) => {
-    // {nanoUSD/tok} = {USD/wholeTok} * {nanoUSD/USD} / {tok/wholeTok} * D27
-    const spotPrice = bn(prices[i].mul(D9d).div(decimalScale[i]).mul(D27d));
+    // D27{nanoUSD/tok} = {USD/wholeTok} * {nanoUSD/USD} * D27 / {tok/wholeTok}
+    const spotPrice = bn(prices[i].mul(D9d).mul(D27d).div(decimalScale[i]));
 
     if (spotPrice < initialPrice.low || spotPrice > initialPrice.high) {
       throw new Error(
@@ -515,10 +501,10 @@ export const getOpenAuction = (
       return initialPrice;
     }
 
-    // D27{nanoUSD/tok} = {USD/wholeTok} * {nanoUSD/USD} / {tok/wholeTok} * D27
+    // D27{nanoUSD/tok} = {USD/wholeTok} * {nanoUSD/USD} * D27 / {tok/wholeTok}
     const pricesD27 = {
-      low: bn(prices[i].mul(ONE.sub(priceError[i])).mul(D9d).div(decimalScale[i]).mul(D27d)),
-      high: bn(prices[i].div(ONE.sub(priceError[i])).mul(D9d).div(decimalScale[i]).mul(D27d)),
+      low: bn(prices[i].mul(ONE.sub(priceError[i])).mul(D9d).mul(D27d).div(decimalScale[i])),
+      high: bn(prices[i].div(ONE.sub(priceError[i])).mul(D9d).mul(D27d).div(decimalScale[i])),
     };
 
     // low
@@ -599,7 +585,7 @@ export const getOpenAuction = (
       if (tokenSurplusValue.gte(ONE)) {
         surplusTokens.push(token);
         surplusTokenSizes.push(tokenSurplusValue.toNumber());
-        
+
         if (debug && newWeights[i].spot === 0n) {
           console.log(`        EJECTING ${token}:`);
           console.log(`          assets[${i}]: ${_assets[i].toString()}`);
