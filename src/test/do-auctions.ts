@@ -24,7 +24,7 @@ export async function doAuctions(
 ) {
   const { folio, folioLensTyped } = contracts;
   const { bidder, auctionLauncher } = signers;
-  const { initialSupply, initialAssets, startRebalanceArgs } = initialState;
+  const { initialTokens, initialSupply, initialAssets, startRebalanceArgs } = initialState;
 
   // Get decimals for all tokens
   const allDecimalsRec: Record<string, bigint> = {};
@@ -189,7 +189,13 @@ export async function doAuctions(
     // Build initialAmountsArray in rebalanceState.tokens order
     // Use the amounts captured BEFORE any auctions started
     const initialAssetsArrayRebalanceOrder = rebalanceState.tokens.map(
-      (token: string) => initialAssets[rebalanceTokens.indexOf(token)],
+      (token: string) => {
+        const idx = initialTokens.findIndex((t: string) => t.toLowerCase() === token.toLowerCase());
+        if (idx === -1) {
+          throw new Error(`Token ${token} from rebalanceState not found in initialTokens`);
+        }
+        return initialAssets[idx];
+      },
     );
 
     // which target basket we pass to getOpenAuction() depends on TRACKING vs NATIVE weightControl

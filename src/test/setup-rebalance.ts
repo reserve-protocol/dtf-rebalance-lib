@@ -20,6 +20,7 @@ export interface RebalanceSigners {
 }
 
 export interface RebalanceInitialState {
+  initialTokens: string[];
   initialAssets: bigint[];
   initialSupply: bigint;
   startRebalanceArgs: {
@@ -44,7 +45,7 @@ export async function setupRebalance(
   const { rebalanceManager } = signers;
 
   const initialSupply = await folio.totalSupply();
-  const [, initialAssets] = await folio.totalAssets();
+  const [currentTokens, currentAssets] = await folio.totalAssets();
 
   // Get decimals for all tokens
   const allDecimalsRec: Record<string, bigint> = {};
@@ -57,9 +58,15 @@ export async function setupRebalance(
     throw new Error("Mismatch between tokens length and targetBasketRec keys");
   }
 
+  // Build initialAssets array matching the tokens parameter order
+  const initialAssets: bigint[] = tokens.map((token: string) => {
+    const idx = currentTokens.findIndex((t: string) => t.toLowerCase() === token.toLowerCase());
+    return idx === -1 ? 0n : currentAssets[idx];
+  });
+
   // {USD}
   const currentBasketValuesRec: Record<string, number> = {};
-  tokens.forEach((token: string) => {
+  tokens.forEach((token: string, i: number) => {
     const price = rebalancePricesRec[token.toLowerCase()];
     if (!price) {
       throw new Error(`Token ${token} from tokens not found in rebalancePricesRec: ${token}`);
@@ -67,7 +74,7 @@ export async function setupRebalance(
 
     // {USD} = {USD/wholeTok} * {tok} / {tok/wholeTok}
     currentBasketValuesRec[token] =
-      (price.snapshotPrice * Number(initialAssets[token])) / Number(10n ** allDecimalsRec[token]);
+      (price.snapshotPrice * Number(initialAssets[i])) / Number(10n ** allDecimalsRec[token]);
   });
 
   const [weightControl] = await folio.rebalanceControl();
@@ -120,6 +127,7 @@ export async function setupRebalance(
   });
 
   return {
+    initialTokens: tokens,
     initialAssets,
     initialSupply,
     startRebalanceArgs,

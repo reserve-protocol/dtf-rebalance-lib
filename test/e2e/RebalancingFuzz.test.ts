@@ -20,6 +20,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
     let bidder: HardhatEthersSigner;
     let rebalanceManager: HardhatEthersSigner;
     let auctionLauncher: HardhatEthersSigner;
+    let initialTimestamp: number;
 
     before(async function () {
       this.timeout(60000);
@@ -34,6 +35,9 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
       bidder = contractsAndSigners.bidder;
       rebalanceManager = contractsAndSigners.rebalanceManager;
       auctionLauncher = contractsAndSigners.auctionLauncher;
+      
+      // Capture initial timestamp for price fetching
+      initialTimestamp = await time.latest();
     });
 
     // Initialize tokens once outside the loop to keep them constant
@@ -51,7 +55,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
 
         // --- Common setup for the round ---
 
-        const pricesRecRaw = await getAssetPrices(orderedTokens, folioConfig.chainId, await time.latest());
+        const pricesRecRaw = await getAssetPrices(orderedTokens, folioConfig.chainId, initialTimestamp);
 
         // Normalize price records to lowercase keys
         const pricesRec: Record<string, { snapshotPrice: number }> = {};
@@ -62,7 +66,9 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
 
         const assetsRec: Record<string, bigint> = {};
         orderedTokens.forEach((token: string) => {
-          assetsRec[token] = assets[tokens.indexOf(token)];
+          const idx = tokens.findIndex((t: string) => t.toLowerCase() === token.toLowerCase());
+          // If token was ejected in previous round, it won't be in current assets
+          assetsRec[token] = idx === -1 ? 0n : assets[idx];
         });
 
         // --- Generate target basket with one token ejected ---

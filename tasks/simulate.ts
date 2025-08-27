@@ -575,7 +575,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     };
 
     const initialState = {
-      initialRebalanceTokens,
+      initialTokens: initialRebalanceTokens,
       initialAssets,
       initialSupply,
       startRebalanceArgs,
