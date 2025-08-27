@@ -1,4 +1,4 @@
-import { Folio } from "../src/types";
+import { Folio } from "../types";
 
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 export const ZERO_BYTES = "0x0000000000000000000000000000000000000000000000000000000000000000";

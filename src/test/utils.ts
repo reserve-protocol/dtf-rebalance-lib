@@ -2,7 +2,7 @@ import "@nomicfoundation/hardhat-ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { Contract } from "ethers";
-import { bn } from "../src/numbers";
+import { bn } from "../numbers";
 
 export function toPlainObject(obj: any): any {
   if (typeof obj !== "object" || obj === null) {
@@ -286,21 +286,21 @@ export async function calculateRebalanceMetrics(
   // Calculate what fraction of value is correctly allocated
   // For each token, the "correct" amount is the minimum of what we have vs what we want
   let correctlyAllocatedValue = 0;
-  
+
   orderedTokens.forEach((token: string) => {
     const targetFraction = Number(targetBasketRec[token]) / 1e18;
     const actualFraction = Number(finalTargetBasketRec[token]) / 1e18;
-    
+
     // The correctly allocated fraction for this token is the minimum of target and actual
     const correctFraction = Math.min(targetFraction, actualFraction);
-    
+
     // Add this token's correctly allocated value to the total
     correctlyAllocatedValue += correctFraction * totalValueAfterFinal;
   });
-  
+
   // The fraction of total value that is correctly allocated (0 to 1)
   const fractionCorrect = totalValueAfterFinal > 0 ? correctlyAllocatedValue / totalValueAfterFinal : 0;
-  
+
   // Convert to error percentage (0% = perfect, 100% = completely wrong)
   const totalError = (1 - fractionCorrect) * 100;
 

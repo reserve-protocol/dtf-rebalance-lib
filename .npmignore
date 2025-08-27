@@ -6,3 +6,4 @@ dist/test
 hardhat.config.ts
 .env
 .env.example
+src/test

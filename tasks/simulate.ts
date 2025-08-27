@@ -1,8 +1,8 @@
 import { task } from "hardhat/config";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { FOLIO_CONFIGS } from "./config";
-import { initializeChainState, setupContractsAndSigners } from "./setup";
-import { runRebalance } from "./rebalance-helpers";
+import { FOLIO_CONFIGS } from "../src/test/config";
+import { initializeChainState, setupContractsAndSigners } from "../src/test/setup";
+import { doAuctions } from "../src/test/do-auctions";
 import {
   getAssetPrices,
   calculateRebalanceMetrics,
@@ -10,7 +10,8 @@ import {
   convertProposalPricesToUSD,
   simulateMarketPrices,
   createPriceLookup,
-} from "./utils";
+  whileImpersonating,
+} from "../src/test/utils";
 import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
 import FolioGovernorArtifact from "../out/FolioGovernor.sol/FolioGovernor.json";
@@ -88,7 +89,12 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     }
 
     // Get governor contract
-    const governor = await hre.ethers.getContractAt(FolioGovernorArtifact.abi, folioConfig.basketGovernor);
+    const governorAbi = [
+      ...FolioGovernorArtifact.abi,
+      "function queue(address[] targets, uint256[] values, bytes[] calldatas, bytes32 descriptionHash) returns (uint256)",
+      "function execute(address[] targets, uint256[] values, bytes[] calldatas, bytes32 descriptionHash) payable returns (uint256)",
+    ];
+    const governor = await hre.ethers.getContractAt(governorAbi, folioConfig.basketGovernor);
 
     // Get proposal state
     let proposalState;
@@ -183,9 +189,10 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     let proposalTokens: string[];
     let proposalWeights: bigint[];
     let proposalPrices: { low: bigint; high: bigint }[];
+    let decoded: any; // Store decoded data for later use
 
     try {
-      const decoded = iface.decodeFunctionData("startRebalance", calldata);
+      decoded = iface.decodeFunctionData("startRebalance", calldata);
       proposalTokens = decoded[0];
       // WeightRange is a tuple of [low, spot, high], get spot weight (index 1)
       // These weights are in D27{tok/BU} format - tokens per basket unit with 27 decimals
@@ -507,21 +514,87 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       );
     }
 
-    const totalRebalancedValue = await runRebalance(
+    // Execute the proposal if not already executed
+    if (proposalState !== 7) {
+      console.log(`\n📝 Executing proposal ${id} in simulation...`);
+
+      // Fast-forward to when proposal can be executed
+      if (proposalState === 0 || proposalState === 1) {
+        // Pending or Active - need to wait for voting to end
+        const votingEnd = Number(await governor.proposalDeadline(id));
+        await hre.network.provider.send("evm_setNextBlockTimestamp", [votingEnd + 1]);
+        await hre.network.provider.send("evm_mine", []);
+      }
+
+      // Queue the proposal if it needs queuing
+      if (needsQueuing) {
+        await whileImpersonating(hre, await admin.getAddress(), async (signer) => {
+          await (
+            await (governor.connect(signer) as any).queue(
+              event.args.targets,
+              event.args.values,
+              event.args.calldatas,
+              hre.ethers.id(event.args.description || ""),
+            )
+          ).wait();
+        });
+
+        // Fast-forward past timelock delay
+        const proposalEta = await governor.proposalEta(id);
+        await hre.network.provider.send("evm_setNextBlockTimestamp", [Number(proposalEta) + 1]);
+        await hre.network.provider.send("evm_mine", []);
+      }
+
+      // Execute the proposal
+      await whileImpersonating(hre, await admin.getAddress(), async (signer) => {
+        await (
+          await (governor.connect(signer) as any).execute(
+            event.args.targets,
+            event.args.values,
+            event.args.calldatas,
+            hre.ethers.id(event.args.description || ""),
+          )
+        ).wait();
+      });
+
+      console.log(`✅ Proposal executed successfully`);
+    } else {
+      console.log(`\n✅ Proposal ${id} was already executed`);
+    }
+
+    // Capture initial state after proposal execution
+    const [initialRebalanceTokens, initialAssets] = await folio.totalAssets();
+    const initialSupply = await folio.totalSupply();
+
+    // Create the initial state object needed for doAuctions
+    // We need to reconstruct startRebalanceArgs from the proposal data
+    const startRebalanceArgs = {
+      weights: decoded[1], // Already extracted earlier
+      prices: decoded[2], // Already extracted earlier
+      limits: decoded[3], // Extract limits from decoded data
+    };
+
+    const initialState = {
+      initialRebalanceTokens,
+      initialAssets,
+      initialSupply,
+      startRebalanceArgs,
+    };
+
+    // Now simulate the auctions
+    console.log(`\n⚡ Running auction simulation...`);
+
+    const { totalRebalancedValue } = await doAuctions(
       hre,
-      folioConfig,
       { folio, folioLensTyped },
       { bidder, rebalanceManager, auctionLauncher, admin },
       allTokens,
       currentAmountsRec,
       targetBasketRec,
       prices,
+      initialState,
       0.9, // finalStageAt
       false, // debug
-      priceDeviationValue, // pass the configurable price deviation
-      currentPrices, // pass current prices for value calculations
-      true, // useSimulatedPrices - we're using simulated prices from proposal
-      governanceDelayDays, // pass the calculated governance delay
     );
 
     console.log(`\n✅ Rebalance simulation completed successfully!`);

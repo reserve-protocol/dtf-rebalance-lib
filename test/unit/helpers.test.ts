@@ -170,9 +170,9 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("450000000000000000000000000"),
             spot: bn("500000000000000000000000000"),
-            high: bn("555555555555555555555555556"),
+            high: bn("555555555555555555550000000"), // Keep original weight high during EJECT
           },
-          { low: bn("450000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") },
+          { low: bn("450000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") }, // Keep original weight high during EJECT
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
         newLimits: initialLimitsS1,
@@ -234,7 +234,7 @@ describe("NATIVE DTFs", () => {
 
       // The getOpenAuction function will calculate ideal weights and then clamp them
       // With deferWeights, the weight ranges are extremely wide
-      // Since this is an ejection phase, high weights get +10%
+      // During EJECT, high weights are kept at their original values
       assertOpenAuctionArgsEqual(openAuctionArgs, {
         rebalanceNonce: 1n,
         tokens: tokens,
@@ -243,12 +243,12 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("450000000000000000000000000"), // Calculated value, clamped between 1 and 1e54
             spot: bn("500000000000000000000000000"),
-            high: bn("605000000000000000000000000"), // 500e24 * 1.1 * 1.1 for ejection = 605e24
+            high: bn("1e54"), // Keep deferred weight max during EJECT
           },
           {
             low: bn("450000000000000"), // Calculated value, clamped between 1 and 1e54
             spot: bn("500000000000000"),
-            high: bn("605000000000000"), // 500e12 * 1.1 * 1.1 for ejection = 605e12
+            high: bn("1e54"), // Keep deferred weight max during EJECT
           },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
@@ -282,9 +282,9 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("450000000000000000000000000"),
             spot: bn("500000000000000000000000000"),
-            high: bn("555555555555555555555555556"),
+            high: bn("555555555555555555550000000"), // Keep original weight high during EJECT
           },
-          { low: bn("450000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") },
+          { low: bn("450000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") }, // Keep original weight high during EJECT
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
         newLimits: initialLimitsS1,
@@ -316,12 +316,12 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("500000000000000000000000000"),
             spot: bn("500000000000000000000000000"),
-            high: bn("550000000000000000000000000"), // 5e26 * 1.1 for ejection
+            high: bn("555555555555555555550000000"), // Keep original weight high during EJECT
           },
           {
             low: bn("500000000000000"),
             spot: bn("500000000000000"),
-            high: bn("550000000000000"), // 5e14 * 1.1 for ejection
+            high: bn("555555555555556"), // Keep original weight high during EJECT
           },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
@@ -354,9 +354,9 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("450000000000000000000000000"),
             spot: bn("500000000000000000000000000"),
-            high: bn("555555555555555555555555556"),
+            high: bn("555555555555555555550000000"), // Keep original weight high during EJECT
           },
-          { low: bn("450000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") },
+          { low: bn("450000000000000"), spot: bn("500000000000000"), high: bn("555555555555556") }, // Keep original weight high during EJECT
         ],
         newPrices: initialPricesS1, // from mockRebalance due to priceControl=false
         newLimits: initialLimitsS1,
@@ -388,7 +388,7 @@ describe("NATIVE DTFs", () => {
       ];
       // shareValue = 0.9 due to USDC price drop
       // idealWeight calculations affected by shareValue change
-      // With delta=0.1 and ejection, weights get adjusted
+      // With delta=0.1 and ejection, weights keep original highs
       assertOpenAuctionArgsEqual(openAuctionArgs, {
         rebalanceNonce: 1n,
         tokens: tokens, // All tokens
@@ -397,12 +397,12 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("450000000000000000000000000"), // Clamped to initial weight low
             spot: bn("450000000000000000000000000"),
-            high: bn("544500000000000000000000000"), // 0.45e27 * 1.1 * 1.1 = 0.5445e27
+            high: bn("555555555555555555550000000"), // Keep original weight high during EJECT
           },
           {
             low: bn("450000000000000"), // Clamped to initial weight low
             spot: bn("450000000000000"),
-            high: bn("544500000000000"), // 0.45e15 * 1.1 * 1.1 = 0.5445e15
+            high: bn("555555555555556"), // Keep original weight high during EJECT
           },
         ],
         newPrices: expectedNewPricesLoss,
@@ -427,7 +427,7 @@ describe("NATIVE DTFs", () => {
         auctionPriceError,
         finalStageAtForTest,
       );
-      // With high progression and negligible ejection, this reaches FINAL round with delta=0
+      // With high progression and negligible ejection, this is still EJECT round with delta=0
       // All inRebalance tokens are now returned regardless of surpluses/deficits
       assertOpenAuctionArgsEqual(openAuctionArgs, {
         rebalanceNonce: 1n,
@@ -437,12 +437,12 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("450000000000000000000000000"),
             spot: bn("450000000000000000000000000"),
-            high: bn("450000000000000000000000000"), // Clamped to initial weight range
+            high: bn("555555555555555555550000000"), // Keep original weight high during EJECT
           },
           {
             low: bn("450000000000000"),
             spot: bn("450000000000000"),
-            high: bn("450000000000000"), // Clamped to initial weight range
+            high: bn("555555555555556"), // Keep original weight high during EJECT
           },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT, // All token prices
@@ -479,10 +479,10 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("450009000000000000000000000"),
             spot: bn("500010000000000000000000000"),
-            high: bn("555555555555555555555555556"),
+            high: bn("555555555555555555550000000"), // Keep original weight high
           },
           // USDT: actual calculated values with delta=0.1
-          { low: bn("450009000000000"), spot: bn("500010000000000"), high: bn("555555555555556") },
+          { low: bn("450009000000000"), spot: bn("500010000000000"), high: bn("555555555555556") }, // Keep original weight high
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT, // All token prices
         newLimits: initialLimitsS1, // newLimits will be clamped to initial flat NATIVE limits
@@ -645,7 +645,7 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("1000000000000000"),
             spot: bn("1000000000000000"),
-            high: bn("1100000000000000"),
+            high: bn("1111111111111111"), // Keep original weight high during EJECT
           },
           initialWeightsS2[1],
           initialWeightsS2[2],
@@ -682,8 +682,7 @@ describe("NATIVE DTFs", () => {
         { low: bn("9.9e17"), high: bn("1.01e18") }, // DAI (nanoUSD)
         { low: bn("9.9e29"), high: bn("1.01e30") }, // USDT (nanoUSD)
       ];
-      // This new ideal spot (1.111...e15) would get +10% for ejection = 1.222...e15
-      // But this exceeds initialWeightsS2[0].high (1.11111e15), so it gets clamped.
+      // During EJECT, high weights are kept at their original values
       assertOpenAuctionArgsEqual(openAuctionArgs, {
         rebalanceNonce: 2n,
         tokens: tokens, // All tokens included (USDC has deficit, DAI/USDT have surpluses)
@@ -691,7 +690,7 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("1000000000000000"), // Updated: 1.111...e15 * 0.9 = 1.0e15
             spot: bn("1111111111111111"),
-            high: bn("1111111111111111"), // Clamped to weight range limit
+            high: bn("1111111111111111"), // Keep original weight high during EJECT
           },
           initialWeightsS2[1],
           initialWeightsS2[2],
@@ -726,8 +725,7 @@ describe("NATIVE DTFs", () => {
         { low: bn("9.9e17"), high: bn("1.01e18") }, // DAI (nanoUSD)
         { low: bn("9.9e29"), high: bn("1.01e30") }, // USDT (nanoUSD)
       ];
-      // This new ideal spot (9.09091e14) would get +10% for ejection = 9.99999e14
-      // This is within the weight range limits, so no clamping needed.
+      // During EJECT, high weights are kept at their original values
       assertOpenAuctionArgsEqual(openAuctionArgs, {
         rebalanceNonce: 2n,
         tokens: tokens, // All tokens included
@@ -735,7 +733,7 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("900000000000000"), // Clamped to initial weight low
             spot: bn("909090909090909"), // Updated: 9.09091e14
-            high: bn("1100000000000000"), // 9.09091e14 * 1.1 * 1.1 = 1.1e15
+            high: bn("1111111111111111"), // Keep original weight high during EJECT
           },
           initialWeightsS2[1],
           initialWeightsS2[2],
@@ -766,7 +764,7 @@ describe("NATIVE DTFs", () => {
         rebalanceNonce: 2n,
         tokens: tokens, // All tokens are returned
         newWeights: [
-          { low: bn("900000000000000"), spot: bn("900000000000000"), high: bn("900000000000000") }, // USDC
+          { low: bn("900000000000000"), spot: bn("900000000000000"), high: bn("1111111111111111") }, // USDC - Keep original weight high during EJECT
           initialWeightsS2[1], // DAI: unchanged (still 0)
           initialWeightsS2[2], // USDT: unchanged (still 0)
         ],
@@ -1520,5 +1518,90 @@ describe("Price Edge Cases in getOpenAuction", () => {
         message: "no price range",
       },
     );
+  });
+  
+  it("should use ejection-specific targeting when ejectionTarget < 1 during EJECT round", () => {
+    // This tests the new behavior where EJECT rounds target ejection amount * 1.1 when that's < 1,
+    // instead of always going all the way to 100%
+    
+    const tokens = ["USDC", "DAI", "USDT"];
+    const decimals = [bn("6"), bn("18"), bn("6")];
+    const supply = bn("1e18");
+    const finalStageAt = 0.99; // Set high so we can see the ejection-specific targeting
+    
+    // Target weights (where we want to go) - remove USDC completely
+    const targetWeights: WeightRange[] = [
+      { low: bn("0"), spot: bn("0"), high: bn("0") }, // USDC: 0%
+      { low: bn("4.5e26"), spot: bn("5e26"), high: bn("5.5e26") }, // DAI: 50%
+      { low: bn("4.5e14"), spot: bn("5e14"), high: bn("5.5e14") }, // USDT: 50%
+    ];
+    
+    // Current folio: High progression but still has USDC to eject
+    // Set up so progression + ejection * 1.1 < 1
+    const currentFolio = [
+      bn("5e4"), // USDC: Small amount still to eject
+      bn("4.95e17"), // DAI: Almost at target
+      bn("4.95e5"), // USDT: Almost at target
+    ];
+    
+    // Initial folio (where we started)
+    const initialFolio = [
+      bn("3.33e5"), // USDC
+      bn("3.33e17"), // DAI
+      bn("3.34e5"), // USDT
+    ];
+    
+    // Target basket for share value calculation
+    const targetBasket = [bn("0"), bn("5e17"), bn("5e17")];
+    
+    const mockRebalance: Rebalance = {
+      nonce: 1n,
+      tokens: tokens,
+      weights: targetWeights,
+      initialPrices: [
+        { low: bn("9e29"), high: bn("1.11e30") }, // USDC
+        { low: bn("9e17"), high: bn("1.11e18") }, // DAI
+        { low: bn("9e29"), high: bn("1.11e30") }, // USDT
+      ],
+      inRebalance: [true, true, true],
+      limits: { low: bn("1e17"), spot: bn("1e18"), high: bn("1e19") },
+      startedAt: 0n,
+      restrictedUntil: 0n,
+      availableUntil: 0n,
+      priceControl: PriceControl.PARTIAL,
+    };
+    
+    const currentMarketPrices = [1.0, 1.0, 1.0];
+    const auctionPriceError = [0.01, 0.01, 0.01];
+    
+    const [openAuctionArgs, metrics] = getOpenAuction(
+      mockRebalance,
+      supply,
+      supply,
+      initialFolio,
+      targetBasket,
+      currentFolio,
+      decimals,
+      currentMarketPrices,
+      auctionPriceError,
+      finalStageAt,
+      false, // debug
+    );
+    
+    // Verify we're in EJECT round
+    assert.equal(metrics.round, 0, "Should be in EJECT round (0)");
+    
+    // The new behavior: when ejectionTarget < 1, it uses ejectionTarget instead of always going to 100%
+    // Since we have high progression (~0.99) and small ejection, ejectionTarget should be < 1
+    assert(metrics.target < 1, "Target should not be 100% when ejectionTarget < 1");
+    
+    // Verify USDC is being ejected (weight should be 0)
+    const usdcIndex = openAuctionArgs.tokens.indexOf("USDC");
+    assert(usdcIndex !== -1, "USDC should be in the auction");
+    assert.equal(openAuctionArgs.newWeights[usdcIndex].spot, bn("0"), "USDC weight should be 0 (being ejected)");
+    
+    // The ejection should not push us all the way to 100% completion
+    // Since ejectionTarget = progression + portionEjected * 1.1, and we designed it to be < 1
+    assert(metrics.target < 0.999, "Ejection target should be less than 99.9%");
   });
 });

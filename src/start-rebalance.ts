@@ -107,10 +107,6 @@ export const getStartRebalance = (
     // D27{tok/share}{wholeShare/wholeTok} = D27 * {tok/wholeTok} / {share/wholeShare}
     const limitMultiplier = D27d.mul(new Decimal(`1e${decimals[i]}`)).div(D18d);
 
-    if (debug) {
-      console.log("limitMultiplier", limitMultiplier.toString());
-    }
-
     if (!weightControl) {
       // TRACKING case
 

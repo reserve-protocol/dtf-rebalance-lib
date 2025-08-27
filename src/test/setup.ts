@@ -2,15 +2,15 @@ import "@nomicfoundation/hardhat-ethers";
 import { reset } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import { Folio } from "../src/types";
+import { Folio } from "../types";
 import { ZERO_BYTES, CHAIN_RPC_URLS } from "./config";
 import { whileImpersonating } from "./utils";
 
-import FolioArtifact from "../out/Folio.sol/Folio.json";
-import FolioLensArtifact from "../out/FolioLens.sol/FolioLens.json";
-import MathLibArtifact from "../out/MathLib.sol/MathLib.json";
-import RebalancingLibArtifact from "../out/RebalancingLib.sol/RebalancingLib.json";
-import ProxyAdminArtifact from "../out/ProxyAdmin.sol/ProxyAdmin.json";
+import FolioArtifact from "../../out/Folio.sol/Folio.json";
+import FolioLensArtifact from "../../out/FolioLens.sol/FolioLens.json";
+import MathLibArtifact from "../../out/MathLib.sol/MathLib.json";
+import RebalancingLibArtifact from "../../out/RebalancingLib.sol/RebalancingLib.json";
+import ProxyAdminArtifact from "../../out/ProxyAdmin.sol/ProxyAdmin.json";
 import * as dotenv from "dotenv";
 
 dotenv.config();

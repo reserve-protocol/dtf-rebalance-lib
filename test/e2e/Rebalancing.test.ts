@@ -1,9 +1,10 @@
 import { loadFixture, time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import hre from "hardhat";
-import { FOLIO_CONFIGS, CHAIN_BLOCK_NUMBERS } from "../../tasks/config";
-import { initializeChainState, setupContractsAndSigners } from "../../tasks/setup";
-import { runRebalance } from "../../tasks/rebalance-helpers";
-import { getAssetPrices, getTokenNameAndSymbol } from "../../tasks/utils";
+import { FOLIO_CONFIGS, CHAIN_BLOCK_NUMBERS } from "../../src/test/config";
+import { initializeChainState, setupContractsAndSigners } from "../../src/test/setup";
+import { setupRebalance } from "../../src/test/setup-rebalance";
+import { doAuctions } from "../../src/test/do-auctions";
+import { getAssetPrices, getTokenNameAndSymbol } from "../../src/test/utils";
 import { bn } from "../../src/numbers";
 
 // Only test BGCI for now
@@ -32,10 +33,17 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
         tokens.map(async (asset: string) => (await hre.ethers.getContractAt("IERC20Metadata", asset)).decimals()),
       );
 
-      const prices = await getAssetPrices(tokens, folioConfig.chainId, await time.latest());
+      const pricesRecRaw = await getAssetPrices(tokens, folioConfig.chainId, await time.latest());
+
+      // Normalize price records to lowercase keys
+      const pricesRec: Record<string, { snapshotPrice: number }> = {};
+      for (const [token, price] of Object.entries(pricesRecRaw)) {
+        pricesRec[token.toLowerCase()] = price;
+      }
 
       const basketValues = rawBalances.map(
-        (bal: bigint, i: number) => (prices[tokens[i]].snapshotPrice * Number(bal)) / Number(10n ** decimals[i]),
+        (bal: bigint, i: number) =>
+          (pricesRec[tokens[i].toLowerCase()].snapshotPrice * Number(bal)) / Number(10n ** decimals[i]),
       );
       const totalBasketValue = basketValues.reduce((a: number, b: number) => a + b, 0);
       const targetBasketRatios = basketValues.map((value: number) => value / totalBasketValue);
@@ -43,14 +51,14 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
         bn((weight * 10 ** 18).toString()),
       );
 
-      const initialBalancesAsRecord: Record<string, bigint> = {};
+      const initialAssetsRec: Record<string, bigint> = {};
       rawBalances.forEach((bal: bigint, i: number) => {
-        initialBalancesAsRecord[tokens[i]] = bal;
+        initialAssetsRec[tokens[i]] = bal;
       });
 
-      let targetWeightsAsRecord: Record<string, bigint> = {};
+      let targetBasketRec: Record<string, bigint> = {};
       targetBasketBigIntWeights.forEach((weight: bigint, i: number) => {
-        targetWeightsAsRecord[tokens[i]] = weight;
+        targetBasketRec[tokens[i]] = weight;
       });
 
       if (tokens.length > 0 && targetBasketBigIntWeights.length > 0) {
@@ -75,26 +83,39 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
         }
         targetBasketBigIntWeights[0] = 0n;
 
-        targetWeightsAsRecord = {};
+        targetBasketRec = {};
         targetBasketBigIntWeights.forEach((weight: bigint, i: number) => {
-          targetWeightsAsRecord[tokens[i]] = weight;
+          targetBasketRec[tokens[i]] = weight;
         });
       } else {
         console.warn(`Cannot perform ejection for ${folioConfig.name}: basket is empty or not properly initialized.`);
         return;
       }
 
-      await runRebalance(
+      // Setup the rebalance
+      const initialState = await setupRebalance(
         hre,
-        folioConfig,
         { folio, folioLensTyped },
         { bidder, rebalanceManager, auctionLauncher, admin },
         tokens,
-        initialBalancesAsRecord,
-        targetWeightsAsRecord,
-        prices,
-        0.9,
-        false,
+        targetBasketRec,
+        pricesRec,
+        0.5, // priceDeviation default
+        false, // debug
+      );
+
+      // Execute the auctions
+      await doAuctions(
+        hre,
+        { folio, folioLensTyped },
+        { bidder, rebalanceManager, auctionLauncher, admin },
+        tokens,
+        initialAssetsRec,
+        targetBasketRec,
+        pricesRec,
+        initialState,
+        0.9, // finalStageAt
+        false, // debug
       );
     });
   });
