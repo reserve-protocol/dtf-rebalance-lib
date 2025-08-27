@@ -257,6 +257,17 @@ export const getOpenAuction = (
     })
     .reduce((a, b) => a.add(b), ZERO)
     .div(shareValue);
+    
+  if (debug && ejectionIndices.length > 0) {
+    console.log("      Ejection calculation:");
+    console.log("        ejectionIndices:", ejectionIndices);
+    ejectionIndices.forEach(i => {
+      console.log(`        Token ${i}: assets=${_assets[i].toString()}, decimals=${_decimals[i].toString()}`);
+      console.log(`        Token ${i}: folio=${folio[i].toString()}, price=${prices[i].toString()}, value=${folio[i].mul(prices[i]).toString()}`);
+    });
+    console.log("        shareValue:", shareValue.toString());
+    console.log("        Total folio value:", folio.map((f, i) => f.mul(prices[i])).reduce((a, b) => a.add(b)).toString());
+  }
 
   // ================================================================
 
@@ -348,17 +359,18 @@ export const getOpenAuction = (
   if (portionBeingEjected.gt(1e-5)) {
     round = AuctionRound.EJECT;
 
-    // if the ejections are everything that's left, keep the finalStageAt targeting from above
-    if (progression.add(portionBeingEjected).lt(ONE)) {
-      // else: get rid of all the dust
-      let ejectionTarget = progression.add(portionBeingEjected.mul(1.1)); // buy up to 10% extra
-      if (ejectionTarget.gt(ONE)) {
-        ejectionTarget = ONE;
-      }
-
-      if (ejectionTarget.gt(target)) {
-        target = ejectionTarget;
-      }
+    // if the ejections are mostly what's left, target JUST the ejection if that puts us at <100%
+    let ejectionTarget = progression.add(portionBeingEjected.mul(1.1)); // buy up to 10% extra
+    if (ejectionTarget.lt(ONE)) {
+      target = ejectionTarget;
+    }
+    
+    if (debug) {
+      console.log("      EJECT round detected:");
+      console.log("        portionBeingEjected:", portionBeingEjected.toString());
+      console.log("        progression:", progression.toString());
+      console.log("        ejectionTarget:", ejectionTarget.toString());
+      console.log("        target:", target.toString());
     }
   }
 
@@ -587,6 +599,14 @@ export const getOpenAuction = (
       if (tokenSurplusValue.gte(ONE)) {
         surplusTokens.push(token);
         surplusTokenSizes.push(tokenSurplusValue.toNumber());
+        
+        if (debug && newWeights[i].spot === 0n) {
+          console.log(`        EJECTING ${token}:`);
+          console.log(`          assets[${i}]: ${_assets[i].toString()}`);
+          console.log(`          sellDownTo: ${sellDownTo.toString()}`);
+          console.log(`          surplusAmount: ${surplusAmount.toString()}`);
+          console.log(`          surplusValue: ${tokenSurplusValue.toString()}`);
+        }
       }
     }
   });
