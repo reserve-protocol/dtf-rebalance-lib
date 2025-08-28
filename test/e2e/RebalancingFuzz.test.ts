@@ -135,6 +135,11 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
 
         const auctionPriceDeviation = 0.1 + Math.random() * 0.1;
 
+        // Generate random slippage range (between 0.1% and 1%)
+        const minSlippage = 0.001 + Math.random() * 0.003; // 0.1% to 0.4%
+        const maxSlippage = minSlippage + 0.002 + Math.random() * 0.004; // +0.2% to +0.6% more
+        const swapSlippageRange: [number, number] = [minSlippage, maxSlippage];
+
         // Execute the auctions
         await doAuctions(
           hre,
@@ -148,6 +153,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
           0.9, // finalStageAt
           false, // debug
           auctionPriceDeviation, // Pass random auction deviation
+          swapSlippageRange, // Pass random slippage range
         );
       });
     }

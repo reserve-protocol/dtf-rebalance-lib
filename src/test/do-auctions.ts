@@ -22,6 +22,7 @@ export async function doAuctions(
   finalStageAt: number,
   debug?: boolean,
   auctionPriceDeviation: number = 0.02,
+  swapSlippageRange: [number, number] = [0.001, 0.005], // 0.1% to 0.5% default slippage
 ) {
   const { folio, folioLensTyped } = contracts;
   const { bidder, auctionLauncher } = signers;
@@ -277,10 +278,18 @@ export async function doAuctions(
       if (!buyTokenContract) {
         throw new Error(`Mocked token for ${bid[1]} not found during bidding.`);
       }
+      
+      // Apply random slippage to simulate real-world execution
+      // We simulate slippage by reducing the sell amount we get back
+      const slippage = swapSlippageRange[0] + Math.random() * (swapSlippageRange[1] - swapSlippageRange[0]);
+      const actualSellAmount = BigInt(Math.floor(Number(bid[2]) * (1 - slippage)));
+      
+      // Mint the full buy amount as expected
       await (await buyTokenContract.mint(await bidder.getAddress(), bid[3])).wait();
 
       await whileImpersonating(hre, await bidder.getAddress(), async (signer) => {
         await (await (buyTokenContract.connect(signer) as Contract).approve(await folio.getAddress(), bid[3])).wait();
+        // Execute with original bid amounts - the slippage is simulated by the reduced sell amount we'll track
         await (await (folio.connect(signer) as any).bid(auctionId, bid[0], bid[1], bid[2], bid[3], false, "0x")).wait();
 
         const sellTokenContract = await hre.ethers.getContractAt("IERC20Metadata", bid[0]);
@@ -295,12 +304,18 @@ export async function doAuctions(
         const sellValuePriceData = rebalancePricesRec[bid[0].toLowerCase()];
         const sellValuePrice = sellValuePriceData ? sellValuePriceData.snapshotPrice : 0;
 
-        const sellValue = (Number(bid[2]) * sellValuePrice) / Number(10n ** allDecimalsRec[bid[0]]);
-        totalRebalancedValue += sellValue; // Accumulate total traded value
+        // Calculate values with slippage simulation
+        const originalSellValue = (Number(bid[2]) * sellValuePrice) / Number(10n ** allDecimalsRec[bid[0]]);
+        const actualSellValue = (Number(actualSellAmount) * sellValuePrice) / Number(10n ** allDecimalsRec[bid[0]]);
+        const buyValue = (Number(bid[3]) * buyPrice) / Number(10n ** allDecimalsRec[bid[1]]);
+        const slippagePercent = (slippage * 100).toFixed(2);
+        
+        // Use actual sell value for tracking (simulating that we got less than expected)
+        totalRebalancedValue += actualSellValue; // Accumulate total traded value with slippage
 
         console.log(
           "      🔄 ",
-          `${sellSymbol} ($${sellValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) -> ${buySymbol} ($${((Number(bid[3]) * buyPrice) / Number(10n ** allDecimalsRec[bid[1]])).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
+          `${sellSymbol} ($${actualSellValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) -> ${buySymbol} ($${buyValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) [${slippagePercent}% slip]`,
         );
       });
 
