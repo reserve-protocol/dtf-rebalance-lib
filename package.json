@@ -1,6 +1,6 @@
 {
   "name": "@reserve-protocol/dtf-rebalance-lib",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "description": "Rebalancing library for DTFs in typescript",
   "main": "dist/index.js",
   "module": "dist/index.js",

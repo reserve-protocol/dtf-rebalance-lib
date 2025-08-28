@@ -601,7 +601,10 @@ export const getOpenAuction = (
   // update targeting estimates
 
   // {1} = {1} + {USD} * {share} / {USD/share}
-  target = progression.add(new Decimal(auctionSize).div(shareValue.mul(supply)));
+  const adjustedTarget = progression.add(new Decimal(auctionSize).div(shareValue.mul(supply)));
+  if (adjustedTarget.lt(ONE)) {
+    target = adjustedTarget;
+  }
 
   const relativeTarget = target.sub(initialProgression).div(ONE.sub(initialProgression));
 
