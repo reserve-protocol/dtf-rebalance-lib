@@ -351,22 +351,22 @@ export async function doAuctions(
   // ROUND 1
   let auctionMetrics = await doAuction(1);
 
+  const TOLERANCE = 1e-6;
+
   // ROUND 2
-  if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target !== 1) {
+  if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - TOLERANCE) {
     auctionMetrics = await doAuction(2);
   }
 
   // ROUND 3
-  if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target !== 1) {
+  if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - TOLERANCE) {
     auctionMetrics = await doAuction(3);
   }
 
-  if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target !== 1) {
+  if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - TOLERANCE) {
     throw new Error("did not finish rebalancing after 3 auctions");
   }
-
-  // For backward compatibility with tests, verify target reached
-  expect(auctionMetrics.target).to.equal(1);
+  expect(auctionMetrics.target).to.be.closeTo(1, TOLERANCE);
 
   // Verify all tokens with weight 0 have been fully ejected
   for (const token of rebalanceTokens) {

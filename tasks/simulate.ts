@@ -350,15 +350,19 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     }
 
     // Convert proposal prices from D27{nanoUSD/tok} to USD/wholeTok
-    const historicalPrices = convertProposalPricesToUSD(proposalPrices, proposalDecimals, proposalSymbols);
+    // These are the baseline prices reverse-engineered from the proposal's high/low bounds
+    const baselinePrices = convertProposalPricesToUSD(proposalPrices, proposalDecimals, proposalSymbols);
 
-    // Simulate market price movements during calculated governance delay
-    const simulatedPriceData = simulateMarketPrices(historicalPrices, marketVolatility, governanceDelayDays);
+    // Apply random market movements to baseline prices for auction simulation
+    // This simulates price changes that might occur during the governance delay
+    const deviatedPriceData = simulateMarketPrices(baselinePrices, marketVolatility, governanceDelayDays);
 
-    // Build price records for all tokens using proposal data
-    // All prices are derived from the proposal's price bounds (geometric mean of low and high)
-    const prices: Record<string, { snapshotPrice: number }> = {}; // Simulated prices for rebalancing
-    const priceChanges: { symbol: string; historical: number; simulated: number; change: string }[] = [];
+    // Build two sets of price records:
+    // 1. baselinePriceRec - for measurements and display (no deviation)
+    // 2. auctionPriceRec - for auction execution (with random deviation)
+    const baselinePriceRec: Record<string, { snapshotPrice: number }> = {};
+    const auctionPriceRec: Record<string, { snapshotPrice: number }> = {};
+    const priceChanges: { symbol: string; baseline: number; deviated: number; change: string }[] = [];
 
     // Build the complete price records - using lowercase keys for consistency
     for (let i = 0; i < allTokens.length; i++) {
@@ -367,24 +371,30 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       const proposalIndex = proposalTokens.indexOf(token);
 
       if (proposalIndex >= 0) {
-        // Use simulated price for tokens in the proposal
-        prices[tokenKey] = simulatedPriceData[proposalIndex.toString()];
-        const historicalPrice = historicalPrices[proposalIndex];
-        const priceChange = ((prices[tokenKey].snapshotPrice / historicalPrice - 1) * 100).toFixed(2);
+        // Store baseline price (no deviation)
+        const baseline = baselinePrices[proposalIndex];
+        baselinePriceRec[tokenKey] = { snapshotPrice: baseline };
+        
+        // Store deviated price for auction simulation
+        auctionPriceRec[tokenKey] = deviatedPriceData[proposalIndex.toString()];
+        
+        const priceChange = ((auctionPriceRec[tokenKey].snapshotPrice / baseline - 1) * 100).toFixed(2);
         const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
         const symbol = await tokenContract.symbol();
+        
         // Store for later display
         priceChanges.push({
           symbol,
-          historical: historicalPrice,
-          simulated: prices[tokenKey].snapshotPrice,
+          baseline: baseline,
+          deviated: auctionPriceRec[tokenKey].snapshotPrice,
           change: priceChange,
         });
       } else {
         // For tokens not in proposal (shouldn't happen in normal rebalancing),
         // we don't have price data. This will be caught by validation later.
         console.log(`   Warning: Token ${token} is in current basket but not in proposal - no price data available`);
-        prices[tokenKey] = { snapshotPrice: 0 };
+        baselinePriceRec[tokenKey] = { snapshotPrice: 0 };
+        auctionPriceRec[tokenKey] = { snapshotPrice: 0 };
       }
     }
 
@@ -405,8 +415,9 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       targetBasketRec[proposalTokens[i]] = proposalWeights[i];
     }
 
-    // Create price lookup helper
-    const priceLookup = createPriceLookup(prices);
+    // Create price lookup helpers for both baseline and auction prices
+    const baselinePriceLookup = createPriceLookup(baselinePriceRec);
+    const auctionPriceLookup = createPriceLookup(auctionPriceRec);
 
     // Calculate current basket values
     let totalCurrentValue = 0;
@@ -416,7 +427,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       const index = currentTokens.indexOf(token);
       const balance = currentAmounts[index];
       const decimals = decimalsRec[token];
-      const tokenPrice = priceLookup.getPrice(token);
+      const tokenPrice = baselinePriceLookup.getPrice(token);
       if (tokenPrice > 0) {
         const dollarValue = (tokenPrice * Number(balance)) / Number(10n ** decimals);
         currentValues[token] = dollarValue;
@@ -439,7 +450,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     for (const token of proposalTokens) {
       const weight = targetBasketRec[token] || 0n;
       const decimals = decimalsRec[token];
-      const tokenPrice = priceLookup.getPrice(token);
+      const tokenPrice = baselinePriceLookup.getPrice(token);
 
       // Weight is in D27{tok/BU} format where tok and BU are smallest units
       // To get whole tokens per whole BU:
@@ -507,7 +518,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     console.log(`\n📈 Price simulation (proposal baseline → ${governanceDelayDays.toFixed(1)} days later):`);
     for (const priceChange of priceChanges) {
       console.log(
-        `   ${priceChange.symbol}: $${priceChange.historical.toFixed(2)} → $${priceChange.simulated.toFixed(2)} (${priceChange.change}%)`,
+        `   ${priceChange.symbol}: $${priceChange.baseline.toFixed(2)} → $${priceChange.deviated.toFixed(2)} (${priceChange.change}%)`,
       );
     }
 
@@ -652,7 +663,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     const tokensWithoutPrices: string[] = [];
     for (const token of allTokens) {
       const priceKey = token.toLowerCase();
-      if (!prices[priceKey] || !prices[priceKey].snapshotPrice || prices[priceKey].snapshotPrice === 0) {
+      if (!auctionPriceRec[priceKey] || !auctionPriceRec[priceKey].snapshotPrice || auctionPriceRec[priceKey].snapshotPrice === 0) {
         tokensWithoutPrices.push(token);
       }
     }
@@ -673,7 +684,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       allTokenDecimals.push(await tokenContract.decimals());
     }
     
-    const allTokenPrices = allTokens.map((token) => priceLookup.getPrice(token));
+    const allTokenPrices = allTokens.map((token) => baselinePriceLookup.getPrice(token));
     const { getTargetBasket } = await import("../src/open-auction");
     
     // Use the reordered weights from startRebalanceArgs
@@ -709,7 +720,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       allTokens,
       currentAmountsRec,
       normalizedTargetBasketRec,  // Use normalized percentages instead of raw weights
-      prices,
+      auctionPriceRec,  // Use deviated prices for realistic auction simulation
       initialState,
       0.9, // finalStageAt
       false, // debug
@@ -728,7 +739,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       folio,
       allTokens,
       normalizedTargetBasketRec,  // Use the already calculated normalized target
-      prices, // Use simulated prices that were active during auctions
+      baselinePriceRec, // Use baseline prices for consistent error calculation
     );
 
     // Log the results
