@@ -37,6 +37,22 @@ export async function doAuctions(
 
   const currentSupply = await folio.totalSupply();
 
+  // Validate all tokens have prices
+  const missingPrices: string[] = [];
+  for (const token of rebalanceTokens) {
+    const priceKey = token.toLowerCase();
+    if (!rebalancePricesRec[priceKey] || !rebalancePricesRec[priceKey].snapshotPrice) {
+      missingPrices.push(token);
+    }
+  }
+
+  if (missingPrices.length > 0) {
+    throw new Error(
+      `Missing price data for the following tokens: ${missingPrices.join(", ")}\n` +
+        `All tokens must have valid price data in rebalancePricesRec before running auctions.`,
+    );
+  }
+
   for (const token of rebalanceTokens) {
     if (!(token in initialAssetsRec)) {
       throw new Error(`Token ${token} from tokens not found in initialAssetsRec`);
@@ -278,12 +294,12 @@ export async function doAuctions(
       if (!buyTokenContract) {
         throw new Error(`Mocked token for ${bid[1]} not found during bidding.`);
       }
-      
+
       // Apply random slippage to simulate real-world execution
       // We simulate slippage by reducing the sell amount we get back
       const slippage = swapSlippageRange[0] + Math.random() * (swapSlippageRange[1] - swapSlippageRange[0]);
       const actualSellAmount = BigInt(Math.floor(Number(bid[2]) * (1 - slippage)));
-      
+
       // Mint the full buy amount as expected
       await (await buyTokenContract.mint(await bidder.getAddress(), bid[3])).wait();
 
@@ -305,11 +321,10 @@ export async function doAuctions(
         const sellValuePrice = sellValuePriceData ? sellValuePriceData.snapshotPrice : 0;
 
         // Calculate values with slippage simulation
-        const originalSellValue = (Number(bid[2]) * sellValuePrice) / Number(10n ** allDecimalsRec[bid[0]]);
         const actualSellValue = (Number(actualSellAmount) * sellValuePrice) / Number(10n ** allDecimalsRec[bid[0]]);
         const buyValue = (Number(bid[3]) * buyPrice) / Number(10n ** allDecimalsRec[bid[1]]);
         const slippagePercent = (slippage * 100).toFixed(2);
-        
+
         // Use actual sell value for tracking (simulating that we got less than expected)
         totalRebalancedValue += actualSellValue; // Accumulate total traded value with slippage
 

@@ -493,7 +493,7 @@ export const getOpenAuction = (
 
     if (spotPrice < initialPrice.low || spotPrice > initialPrice.high) {
       throw new Error(
-        `spot price ${spotPrice.toString()} out of bounds relative to initial range [${initialPrice.low.toString()}, ${initialPrice.high.toString()}]! auction launcher MUST closeRebalance to prevent loss!`,
+        `Token ${rebalance.tokens[i]}: spot price ${spotPrice.toString()} out of bounds relative to initial range [${initialPrice.low.toString()}, ${initialPrice.high.toString()}]! auction launcher MUST closeRebalance to prevent loss!`,
       );
     }
 

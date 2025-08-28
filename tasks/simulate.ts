@@ -4,7 +4,6 @@ import { FOLIO_CONFIGS } from "../src/test/config";
 import { initializeChainState, setupContractsAndSigners } from "../src/test/setup";
 import { doAuctions } from "../src/test/do-auctions";
 import {
-  getAssetPrices,
   calculateRebalanceMetrics,
   logPercentages,
   convertProposalPricesToUSD,
@@ -19,21 +18,15 @@ import FolioGovernorArtifact from "../out/FolioGovernor.sol/FolioGovernor.json";
 task("simulate", "Run a live rebalance simulation for a governance proposal")
   .addParam("id", "The governance proposal ID")
   .addParam("symbol", "The Folio symbol (e.g., DFX, BED)")
-  .addOptionalParam("deviation", "Price deviation setting (0-1, default 0.5 for MEDIUM)", "0.5")
   .addOptionalParam("block", "Block number to fork from (optional, defaults to latest)")
   .addOptionalParam("volatility", "Market volatility for price simulation (0-1, default 0.4 for 40%)", "0.4")
   .setAction(async (taskArgs, hre: HardhatRuntimeEnvironment) => {
-    const { id, symbol, deviation, block, volatility } = taskArgs;
-    const priceDeviationValue = parseFloat(deviation);
+    const { id, symbol, block, volatility } = taskArgs;
     const marketVolatility = parseFloat(volatility);
 
     // Validate proposal ID
     if (!id || id.toString().trim() === "") {
       throw new Error("Proposal ID is required");
-    }
-
-    if (priceDeviationValue < 0 || priceDeviationValue > 1) {
-      throw new Error("Price deviation must be between 0 and 1");
     }
 
     if (marketVolatility < 0 || marketVolatility > 1) {
@@ -62,9 +55,6 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     console.log(`\n🚀 Starting live rebalance simulation for ${folioConfig.name}...`);
     console.log(`📋 Proposal ID: ${id}`);
     console.log(`🏛️  Governor: ${folioConfig.basketGovernor}`);
-    console.log(
-      `📊 Price Deviation: ${priceDeviationValue} (${priceDeviationValue <= 0.3 ? "NARROW" : priceDeviationValue <= 0.7 ? "MEDIUM" : "WIDE"})`,
-    );
     console.log(`📈 Market Volatility: ${(marketVolatility * 100).toFixed(0)}% annual`);
     console.log(`🔢 Fork Block: ${blockNumber ? blockNumber : "latest"}`);
 
@@ -150,16 +140,33 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       );
     }
 
+    // Convert Result objects to plain arrays to avoid ethers v6 read-only issues
+    // In ethers v6, event args are Result objects with array-like behavior
+    const targets = event.args.targets as string[];
+    const calldatas = event.args.calldatas as string[];
+    // Handle values carefully - they should be numeric values for the proposal
+    const rawValues = event.args.values;
+    const values = Array.isArray(rawValues)
+      ? rawValues.map((v: any) => {
+          // Skip if it's not a valid value that can be converted to BigInt
+          try {
+            return BigInt(v.toString());
+          } catch {
+            return 0n; // Default to 0 for non-numeric values
+          }
+        })
+      : [0n]; // Default to single zero value if not an array
+
     // Get the first action's calldata (should be the startRebalance call)
-    const calldata = event.args.calldatas[0];
-    console.log(`   Found ${event.args.calldatas.length} action(s) in proposal`);
+    const calldata = calldatas[0];
+    console.log(`   Found ${calldatas.length} action(s) in proposal`);
 
     // Validate that the target contract is the folio
-    if (event.args.targets[0].toLowerCase() !== folioConfig.folio.toLowerCase()) {
+    if (targets[0] && targets[0].toLowerCase() !== folioConfig.folio.toLowerCase()) {
       throw new Error(
         `Proposal ${id} does not target the expected folio contract.\n` +
           `Expected: ${folioConfig.folio}\n` +
-          `Found: ${event.args.targets[0]}\n` +
+          `Found: ${targets[0]}\n` +
           `This proposal may be for a different folio or contract.`,
       );
     }
@@ -172,7 +179,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     // Validate it's a startRebalance call
     let functionName: string;
     try {
-      const parsed = iface.parseTransaction({ data: calldata });
+      const parsed = iface.parseTransaction({ data: calldata as string });
       functionName = parsed?.name || "";
     } catch {
       functionName = "";
@@ -192,30 +199,24 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     let decoded: any; // Store decoded data for later use
 
     try {
-      decoded = iface.decodeFunctionData("startRebalance", calldata);
-      proposalTokens = decoded[0];
+      decoded = iface.decodeFunctionData("startRebalance", calldata as string);
+      // Convert Result objects to plain arrays
+      proposalTokens = decoded[0] as string[];
       // WeightRange is a tuple of [low, spot, high], get spot weight (index 1)
       // These weights are in D27{tok/BU} format - tokens per basket unit with 27 decimals
       // They represent absolute amounts, NOT percentages
-      proposalWeights = decoded[1].map((w: any) => {
-        // Handle both array and object access patterns
-        if (Array.isArray(w)) {
-          return w[1]; // spot weight is at index 1
-        } else if (w.spot !== undefined) {
-          return w.spot;
-        } else {
-          return w[1]; // fallback to array access
-        }
+      proposalWeights = (decoded[1] as any[]).map((w: any) => {
+        // ethers v6 returns Result objects which need conversion
+        return BigInt(w[1].toString()); // spot weight is at index 1
       });
 
       // Extract historical prices from proposal
       // PriceRange is a tuple of [low, high] in D27{nanoUSD/tok} format
-      proposalPrices = decoded[2].map((p: any) => {
-        if (Array.isArray(p)) {
-          return { low: p[0], high: p[1] };
-        } else {
-          return { low: p.low, high: p.high };
-        }
+      proposalPrices = (decoded[2] as any[]).map((p: any) => {
+        return {
+          low: BigInt(p[0].toString()),
+          high: BigInt(p[1].toString()),
+        };
       });
 
       console.log(`📊 Proposal contains ${proposalTokens.length} tokens`);
@@ -248,6 +249,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
 
     // Calculate real governance delay
     const currentTime = await time.latest();
+    console.log(`   Current time: ${currentTime}`);
     let governanceDelayDays: number;
 
     // Check if proposal needs queuing (has a timelock)
@@ -353,46 +355,36 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     // Simulate market price movements during calculated governance delay
     const simulatedPriceData = simulateMarketPrices(historicalPrices, marketVolatility, governanceDelayDays);
 
-    // Fetch current prices from API for value calculations (single batch call)
-    console.log(`   Fetching current prices for all ${allTokens.length} tokens...`);
-    const currentPricesFromAPI = await getAssetPrices(allTokens, folioConfig.chainId, await time.latest());
-
-    // Build price records for all tokens
+    // Build price records for all tokens using proposal data
+    // All prices are derived from the proposal's price bounds (geometric mean of low and high)
     const prices: Record<string, { snapshotPrice: number }> = {}; // Simulated prices for rebalancing
-    const currentPrices: Record<string, { snapshotPrice: number }> = {}; // Current API prices for value calculations
     const priceChanges: { symbol: string; historical: number; simulated: number; change: string }[] = [];
 
-    // Now build the complete price records
+    // Build the complete price records - using lowercase keys for consistency
     for (let i = 0; i < allTokens.length; i++) {
       const token = allTokens[i];
+      const tokenKey = token.toLowerCase(); // Use lowercase key for price lookups
       const proposalIndex = proposalTokens.indexOf(token);
 
-      // Get current price from API (handling case mismatches)
-      const currentPriceEntry = Object.entries(currentPricesFromAPI).find(
-        ([addr, _]) => addr.toLowerCase() === token.toLowerCase(),
-      );
-      currentPrices[token] = currentPriceEntry ? currentPriceEntry[1] : { snapshotPrice: 0 };
-
       if (proposalIndex >= 0) {
-        // Use simulated price for rebalancing
-        prices[token] = simulatedPriceData[proposalIndex.toString()];
+        // Use simulated price for tokens in the proposal
+        prices[tokenKey] = simulatedPriceData[proposalIndex.toString()];
         const historicalPrice = historicalPrices[proposalIndex];
-        const priceChange = ((prices[token].snapshotPrice / historicalPrice - 1) * 100).toFixed(2);
+        const priceChange = ((prices[tokenKey].snapshotPrice / historicalPrice - 1) * 100).toFixed(2);
         const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
         const symbol = await tokenContract.symbol();
         // Store for later display
         priceChanges.push({
           symbol,
           historical: historicalPrice,
-          simulated: prices[token].snapshotPrice,
+          simulated: prices[tokenKey].snapshotPrice,
           change: priceChange,
         });
       } else {
-        // For tokens not in proposal, use current price for simulation too
-        prices[token] = currentPrices[token];
-        if (!currentPriceEntry) {
-          console.log(`   Warning: No price found for ${token}`);
-        }
+        // For tokens not in proposal (shouldn't happen in normal rebalancing),
+        // we don't have price data. This will be caught by validation later.
+        console.log(`   Warning: Token ${token} is in current basket but not in proposal - no price data available`);
+        prices[tokenKey] = { snapshotPrice: 0 };
       }
     }
 
@@ -425,9 +417,14 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       const balance = currentAmounts[index];
       const decimals = decimalsRec[token];
       const tokenPrice = priceLookup.getPrice(token);
-      const dollarValue = (tokenPrice * Number(balance)) / Number(10n ** decimals);
-      currentValues[token] = dollarValue;
-      totalCurrentValue += dollarValue;
+      if (tokenPrice > 0) {
+        const dollarValue = (tokenPrice * Number(balance)) / Number(10n ** decimals);
+        currentValues[token] = dollarValue;
+        totalCurrentValue += dollarValue;
+      } else {
+        // Skip tokens without prices in value calculation
+        currentValues[token] = 0;
+      }
     }
 
     // Calculate proposed basket value breakdown
@@ -506,8 +503,8 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     // Run the rebalance simulation
     console.log(`\n⚡ Running rebalance simulation...`);
 
-    // Display price changes
-    console.log(`\n📈 Simulated price changes ${governanceDelayDays} days from now:`);
+    // Display price changes from proposal baseline
+    console.log(`\n📈 Price simulation (proposal baseline → ${governanceDelayDays.toFixed(1)} days later):`);
     for (const priceChange of priceChanges) {
       console.log(
         `   ${priceChange.symbol}: $${priceChange.historical.toFixed(2)} → $${priceChange.simulated.toFixed(2)} (${priceChange.change}%)`,
@@ -526,33 +523,60 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
         await hre.network.provider.send("evm_mine", []);
       }
 
+      // Re-fetch the proposal state after fast-forwarding
+      const currentProposalState = Number(await governor.state(id));
+
       // Queue the proposal if it needs queuing
       if (needsQueuing) {
-        await whileImpersonating(hre, await admin.getAddress(), async (signer) => {
-          await (
-            await (governor.connect(signer) as any).queue(
-              event.args.targets,
-              event.args.values,
-              event.args.calldatas,
-              hre.ethers.id(event.args.description || ""),
-            )
-          ).wait();
-        });
+        // Check if already queued
+        const proposalEta = await governor.proposalEta(id);
+        const isQueued = proposalEta > 0n;
+
+        if (!isQueued && currentProposalState === 4) {
+          try {
+            // Use the already converted arrays from earlier
+            const queueDescriptionHash = hre.ethers.id(event.args.description || "");
+
+            await whileImpersonating(hre, await admin.getAddress(), async (signer) => {
+              await (
+                await (governor.connect(signer) as any).queue(
+                  [...targets], // Create new arrays to avoid read-only issues
+                  [...values],
+                  [...calldatas],
+                  queueDescriptionHash,
+                )
+              ).wait();
+            });
+
+            console.log(`✅ Proposal queued successfully`);
+          } catch (error: any) {
+            // If queue fails, it might already be queued or there's another issue
+            // Try to proceed anyway
+            console.log(`⚠️ Could not queue proposal (may already be queued). Attempting to proceed...`);
+          }
+        } else if (isQueued) {
+          console.log(`✅ Proposal already queued`);
+        }
 
         // Fast-forward past timelock delay
-        const proposalEta = await governor.proposalEta(id);
-        await hre.network.provider.send("evm_setNextBlockTimestamp", [Number(proposalEta) + 1]);
-        await hre.network.provider.send("evm_mine", []);
+        const finalProposalEta = await governor.proposalEta(id);
+        if (finalProposalEta > 0n) {
+          await hre.network.provider.send("evm_setNextBlockTimestamp", [Number(finalProposalEta) + 1]);
+          await hre.network.provider.send("evm_mine", []);
+        }
       }
 
       // Execute the proposal
+      // Use the already converted arrays from earlier
+      const descriptionHash = hre.ethers.id(event.args.description || "");
+
       await whileImpersonating(hre, await admin.getAddress(), async (signer) => {
         await (
           await (governor.connect(signer) as any).execute(
-            event.args.targets,
-            event.args.values,
-            event.args.calldatas,
-            hre.ethers.id(event.args.description || ""),
+            [...targets], // Create new arrays to avoid read-only issues
+            [...values],
+            [...calldatas],
+            descriptionHash,
           )
         ).wait();
       });
@@ -568,10 +592,53 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
 
     // Create the initial state object needed for doAuctions
     // We need to reconstruct startRebalanceArgs from the proposal data
+    // IMPORTANT: Build arrays in allTokens order to match what doAuctions expects
+    const proposalWeightsArray = decoded[1] as any[];
+    const proposalPricesArray = decoded[2] as any[];
+    
+    // Reorder weights and prices to match allTokens order
+    const reorderedWeights = [];
+    const reorderedPrices = [];
+    
+    for (const token of allTokens) {
+      const proposalIndex = proposalTokens.indexOf(token);
+      if (proposalIndex >= 0) {
+        // Token is in the proposal - use its weights and prices
+        const w = proposalWeightsArray[proposalIndex];
+        reorderedWeights.push({
+          low: BigInt(w[0].toString()),
+          spot: BigInt(w[1].toString()),
+          high: BigInt(w[2].toString()),
+        });
+        
+        const p = proposalPricesArray[proposalIndex];
+        reorderedPrices.push({
+          low: BigInt(p[0].toString()),
+          high: BigInt(p[1].toString()),
+        });
+      } else {
+        // Token not in proposal (shouldn't happen for normal rebalancing)
+        // Use zero weights and a wide price range
+        reorderedWeights.push({
+          low: 0n,
+          spot: 0n,
+          high: 0n,
+        });
+        reorderedPrices.push({
+          low: 0n,
+          high: BigInt("999999999999999999999999999999999999"), // Max reasonable price
+        });
+      }
+    }
+    
     const startRebalanceArgs = {
-      weights: decoded[1], // Already extracted earlier
-      prices: decoded[2], // Already extracted earlier
-      limits: decoded[3], // Extract limits from decoded data
+      weights: reorderedWeights,
+      prices: reorderedPrices,
+      limits: {
+        low: BigInt(decoded[3][0].toString()),
+        spot: BigInt(decoded[3][1].toString()),
+        high: BigInt(decoded[3][2].toString()),
+      },
     };
 
     const initialState = {
@@ -581,8 +648,59 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       startRebalanceArgs,
     };
 
+    // Validate that all tokens have valid prices before running auctions
+    const tokensWithoutPrices: string[] = [];
+    for (const token of allTokens) {
+      const priceKey = token.toLowerCase();
+      if (!prices[priceKey] || !prices[priceKey].snapshotPrice || prices[priceKey].snapshotPrice === 0) {
+        tokensWithoutPrices.push(token);
+      }
+    }
+
+    if (tokensWithoutPrices.length > 0) {
+      throw new Error(
+        `Cannot run auction simulation: Missing or zero price data for tokens:\n` +
+          `${tokensWithoutPrices.join(", ")}\n` +
+          `All tokens involved in the rebalance must have valid price data.`,
+      );
+    }
+
+    // Calculate normalized target basket percentages for doAuctions
+    // We need to normalize the raw weights to D18 percentages
+    const allTokenDecimals: bigint[] = [];
+    for (const token of allTokens) {
+      const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
+      allTokenDecimals.push(await tokenContract.decimals());
+    }
+    
+    const allTokenPrices = allTokens.map((token) => priceLookup.getPrice(token));
+    const { getTargetBasket } = await import("../src/open-auction");
+    
+    // Use the reordered weights from startRebalanceArgs
+    const normalizedTargetArray = getTargetBasket(
+      startRebalanceArgs.weights,
+      allTokenPrices,
+      allTokenDecimals,
+      false, // debug
+    );
+    
+    const normalizedTargetBasketRec: Record<string, bigint> = {};
+    allTokens.forEach((token, i) => {
+      normalizedTargetBasketRec[token] = normalizedTargetArray[i];
+    });
+
+    // Generate random slippage range for this simulation
+    const minSlippage = 0.001 + Math.random() * 0.003; // 0.1% to 0.4%
+    const maxSlippage = minSlippage + 0.002 + Math.random() * 0.004; // +0.2% to +0.6% more
+    const swapSlippageRange: [number, number] = [minSlippage, maxSlippage];
+    
+    // Generate random auction price deviation
+    const auctionPriceDeviation = 0.01 + Math.random() * 0.02; // 1% to 3%
+
     // Now simulate the auctions
     console.log(`\n⚡ Running auction simulation...`);
+    console.log(`   📊 Auction price deviation: ${(auctionPriceDeviation * 100).toFixed(1)}%`);
+    console.log(`   💱 Swap slippage range: ${(minSlippage * 100).toFixed(2)}% - ${(maxSlippage * 100).toFixed(2)}%`);
 
     const { totalRebalancedValue } = await doAuctions(
       hre,
@@ -590,11 +708,13 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       { bidder, rebalanceManager, auctionLauncher, admin },
       allTokens,
       currentAmountsRec,
-      targetBasketRec,
+      normalizedTargetBasketRec,  // Use normalized percentages instead of raw weights
       prices,
       initialState,
       0.9, // finalStageAt
       false, // debug
+      auctionPriceDeviation,
+      swapSlippageRange,
     );
 
     console.log(`\n✅ Rebalance simulation completed successfully!`);
@@ -602,51 +722,18 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     // Calculate and display final metrics
     console.log(`\n📊 Final Rebalance Metrics:`);
 
-    // Convert D27{tok/BU} weights to D18{1} percentages using getTargetBasket
-    // We need to create WeightRange objects and get decimals for all tokens
-    const allTokenDecimals: bigint[] = [];
-    for (const token of allTokens) {
-      const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
-      allTokenDecimals.push(await tokenContract.decimals());
-    }
-
-    const targetWeightRanges = allTokens.map((token) => {
-      const weight = targetBasketRec[token] || 0n;
-      return {
-        low: weight,
-        spot: weight,
-        high: weight,
-      };
-    });
-
-    const allTokenPrices = allTokens.map((token) => priceLookup.getPrice(token));
-
-    // Use getTargetBasket from open-auction to properly convert weights to percentages
-    const { getTargetBasket } = await import("../src/open-auction");
-    const normalizedTargetArray = getTargetBasket(
-      targetWeightRanges,
-      allTokenPrices,
-      allTokenDecimals,
-      false, // debug
-    );
-
-    const normalizedTargetRec: Record<string, bigint> = {};
-    allTokens.forEach((token, i) => {
-      normalizedTargetRec[token] = normalizedTargetArray[i];
-    });
-
     // Calculate metrics
     const metrics = await calculateRebalanceMetrics(
       hre,
       folio,
       allTokens,
-      normalizedTargetRec,
+      normalizedTargetBasketRec,  // Use the already calculated normalized target
       prices, // Use simulated prices that were active during auctions
     );
 
     // Log the results
     logPercentages(`🔍 Final    `, metrics.finalTargetBasketRec, allTokens);
-    logPercentages(`🎯 Target   `, normalizedTargetRec, allTokens);
+    logPercentages(`🎯 Target   `, normalizedTargetBasketRec, allTokens);
 
     // totalError is now directly a percentage (0-100)
     const errorPercentage = metrics.totalError;
