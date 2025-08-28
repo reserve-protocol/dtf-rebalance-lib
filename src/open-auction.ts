@@ -367,12 +367,9 @@ export const getOpenAuction = (
     throw new Error("something has gone very wrong");
   }
 
-  const relativeTarget = target.sub(initialProgression).div(ONE.sub(initialProgression));
-
   if (debug) {
     console.log("round", round);
     console.log("target", target.toString());
-    console.log("relativeTarget", relativeTarget.toString());
   }
 
   // {1}
@@ -600,6 +597,13 @@ export const getOpenAuction = (
   const surplusSize = surplusTokenSizes.reduce((a, b) => a + b, 0);
   const deficitSize = deficitTokenSizes.reduce((a, b) => a + b, 0);
   const auctionSize = surplusSize > deficitSize ? deficitSize : surplusSize;
+
+  // update targeting estimates
+
+  // {1} = {1} + {USD} * {share} / {USD/share}
+  target = progression.add(new Decimal(auctionSize).div(shareValue.mul(supply)));
+
+  const relativeTarget = target.sub(initialProgression).div(ONE.sub(initialProgression));
 
   return [
     {
