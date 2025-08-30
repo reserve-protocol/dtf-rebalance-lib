@@ -374,14 +374,14 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
         // Store baseline price (no deviation)
         const baseline = baselinePrices[proposalIndex];
         baselinePriceRec[tokenKey] = { snapshotPrice: baseline };
-        
+
         // Store deviated price for auction simulation
         auctionPriceRec[tokenKey] = deviatedPriceData[proposalIndex.toString()];
-        
+
         const priceChange = ((auctionPriceRec[tokenKey].snapshotPrice / baseline - 1) * 100).toFixed(2);
         const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
         const symbol = await tokenContract.symbol();
-        
+
         // Store for later display
         priceChanges.push({
           symbol,
@@ -415,9 +415,8 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       targetBasketRec[proposalTokens[i]] = proposalWeights[i];
     }
 
-    // Create price lookup helpers for both baseline and auction prices
+    // Create price lookup helper for baseline prices
     const baselinePriceLookup = createPriceLookup(baselinePriceRec);
-    const auctionPriceLookup = createPriceLookup(auctionPriceRec);
 
     // Calculate current basket values
     let totalCurrentValue = 0;
@@ -606,11 +605,11 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     // IMPORTANT: Build arrays in allTokens order to match what doAuctions expects
     const proposalWeightsArray = decoded[1] as any[];
     const proposalPricesArray = decoded[2] as any[];
-    
+
     // Reorder weights and prices to match allTokens order
     const reorderedWeights = [];
     const reorderedPrices = [];
-    
+
     for (const token of allTokens) {
       const proposalIndex = proposalTokens.indexOf(token);
       if (proposalIndex >= 0) {
@@ -621,7 +620,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
           spot: BigInt(w[1].toString()),
           high: BigInt(w[2].toString()),
         });
-        
+
         const p = proposalPricesArray[proposalIndex];
         reorderedPrices.push({
           low: BigInt(p[0].toString()),
@@ -641,7 +640,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
         });
       }
     }
-    
+
     const startRebalanceArgs = {
       weights: reorderedWeights,
       prices: reorderedPrices,
@@ -663,7 +662,11 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     const tokensWithoutPrices: string[] = [];
     for (const token of allTokens) {
       const priceKey = token.toLowerCase();
-      if (!auctionPriceRec[priceKey] || !auctionPriceRec[priceKey].snapshotPrice || auctionPriceRec[priceKey].snapshotPrice === 0) {
+      if (
+        !auctionPriceRec[priceKey] ||
+        !auctionPriceRec[priceKey].snapshotPrice ||
+        auctionPriceRec[priceKey].snapshotPrice === 0
+      ) {
         tokensWithoutPrices.push(token);
       }
     }
@@ -683,18 +686,20 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
       allTokenDecimals.push(await tokenContract.decimals());
     }
-    
-    const allTokenPrices = allTokens.map((token) => baselinePriceLookup.getPrice(token));
+
     const { getTargetBasket } = await import("../src/open-auction");
-    
-    // Use the reordered weights from startRebalanceArgs
+
+    // Always use baseline prices for calculating the target basket
+    // The target represents what we want to achieve, independent of market volatility
+    const targetCalculationPrices = allTokens.map((token) => baselinePriceLookup.getPrice(token));
+
     const normalizedTargetArray = getTargetBasket(
       startRebalanceArgs.weights,
-      allTokenPrices,
+      targetCalculationPrices,
       allTokenDecimals,
       false, // debug
     );
-    
+
     const normalizedTargetBasketRec: Record<string, bigint> = {};
     allTokens.forEach((token, i) => {
       normalizedTargetBasketRec[token] = normalizedTargetArray[i];
@@ -704,7 +709,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     const minSlippage = 0.001 + Math.random() * 0.003; // 0.1% to 0.4%
     const maxSlippage = minSlippage + 0.002 + Math.random() * 0.004; // +0.2% to +0.6% more
     const swapSlippageRange: [number, number] = [minSlippage, maxSlippage];
-    
+
     // Generate random auction price deviation
     const auctionPriceDeviation = 0.01 + Math.random() * 0.02; // 1% to 3%
 
@@ -713,14 +718,18 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     console.log(`   📊 Auction price deviation: ${(auctionPriceDeviation * 100).toFixed(1)}%`);
     console.log(`   💱 Swap slippage range: ${(minSlippage * 100).toFixed(2)}% - ${(maxSlippage * 100).toFixed(2)}%`);
 
+    // Always pass baseline prices for consistent measurement
+    // doAuctions will apply its own deviation internally for auction execution
+    const pricesForDoAuctions = baselinePriceRec;
+
     const { totalRebalancedValue } = await doAuctions(
       hre,
       { folio, folioLensTyped },
       { bidder, rebalanceManager, auctionLauncher, admin },
       allTokens,
       currentAmountsRec,
-      normalizedTargetBasketRec,  // Use normalized percentages instead of raw weights
-      auctionPriceRec,  // Use deviated prices for realistic auction simulation
+      normalizedTargetBasketRec, // Use normalized percentages instead of raw weights
+      pricesForDoAuctions, // Use appropriate prices based on weightControl
       initialState,
       0.9, // finalStageAt
       false, // debug
@@ -738,7 +747,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       hre,
       folio,
       allTokens,
-      normalizedTargetBasketRec,  // Use the already calculated normalized target
+      normalizedTargetBasketRec, // Use the already calculated normalized target
       baselinePriceRec, // Use baseline prices for consistent error calculation
     );
 
