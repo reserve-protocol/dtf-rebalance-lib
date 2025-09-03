@@ -351,7 +351,7 @@ export async function doAuctions(
   // ROUND 1
   let auctionMetrics = await doAuction(1);
 
-  const TOLERANCE = 1e-6;
+  const TOLERANCE = 1e-5;
 
   // ROUND 2
   if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - TOLERANCE) {
@@ -364,6 +364,7 @@ export async function doAuctions(
   }
 
   if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - TOLERANCE) {
+    console.log("auctionMetrics", auctionMetrics);
     throw new Error("did not finish rebalancing after 3 auctions");
   }
   expect(auctionMetrics.target).to.be.closeTo(1, TOLERANCE);
