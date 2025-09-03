@@ -326,7 +326,7 @@ export const getOpenAuction = (
   }
 
   // approach finalStageAt first
-  if (progression.lt(0.99) && relativeProgression.lt(finalStageAt.sub(0.02))) {
+  if (relativeProgression.lt(finalStageAt.sub(0.01))) {
     round = AuctionRound.PROGRESS;
 
     target = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt));
