@@ -331,8 +331,7 @@ export const getOpenAuction = (
 
     target = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt));
 
-    // never leave more than 1 bps for next auction
-    if (target.gt(ONE.sub(1e-4))) {
+    if (target.gt(ONE.sub(1e-5))) {
       target = ONE;
     }
 
