@@ -107,7 +107,26 @@ export const getStartRebalance = (
     // D27{tok/share}{wholeShare/wholeTok} = D27 * {tok/wholeTok} / {share/wholeShare}
     const limitMultiplier = D27d.mul(new Decimal(`1e${decimals[i]}`)).div(D18d);
 
-    if (!weightControl) {
+    if (spotWeight.eq(ZERO)) {
+      newWeights.push({
+        low: 0n,
+        spot: 0n,
+        high: 0n,
+      });
+    } else if (weightControl) {
+      // NATIVE case
+
+      // {wholeTok/wholeShare} = {wholeTok/wholeShare} / {1}
+      const highWeight = spotWeight.div(ONE.sub(priceError[i]));
+
+      // D27{tok/share} = {wholeTok/wholeShare} * D27{tok/share}{wholeShare/wholeTok} / {BU/share}
+      newWeights.push({
+        low: 1n,
+        spot: bn(spotWeight.mul(limitMultiplier)),
+        high: deferWeights ? D27n * D27n : bn(highWeight.mul(limitMultiplier)),
+      });
+      // 1e54 MAX_WEIGHT
+    } else {
       // TRACKING case
 
       // D27{tok/BU} = {wholeTok/wholeShare} * D27{tok/share}{wholeShare/wholeTok} / {BU/share}
@@ -116,25 +135,6 @@ export const getStartRebalance = (
         spot: bn(spotWeight.mul(limitMultiplier)),
         high: bn(spotWeight.mul(limitMultiplier)),
       });
-    } else {
-      // NATIVE case
-
-      // {wholeTok/wholeShare} = {wholeTok/wholeShare} / {1}
-      const lowWeight = spotWeight.mul(ONE.sub(priceError[i]));
-      const highWeight = spotWeight.div(ONE.sub(priceError[i]));
-
-      // D27{tok/share} = {wholeTok/wholeShare} * D27{tok/share}{wholeShare/wholeTok} / {BU/share}
-      newWeights.push({
-        low: bn(lowWeight.mul(limitMultiplier)),
-        spot: bn(spotWeight.mul(limitMultiplier)),
-        high: bn(highWeight.mul(limitMultiplier)),
-      });
-
-      // deferWeights case
-      if (deferWeights && newWeights[i].low > 0n) {
-        newWeights[i].low = 1n;
-        newWeights[i].high = D27n * D27n; // 1e54 MAX_WEIGHT
-      }
     }
 
     // === newPrices ===
@@ -164,7 +164,7 @@ export const getStartRebalance = (
   }
 
   const newLimits: RebalanceLimits = {
-    low: weightControl ? bn("1e18") : bn(ONE.sub(basketError).mul(D18d)),
+    low: weightControl ? bn("1e18") : 1n,
     spot: bn("1e18"),
     high: weightControl ? bn("1e18") : bn(ONE.div(ONE.sub(basketError)).mul(D18d)),
   };
