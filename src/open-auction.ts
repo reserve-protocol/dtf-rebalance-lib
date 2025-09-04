@@ -564,14 +564,6 @@ export const getOpenAuction = (
       if (tokenSurplusValue.gte(ONE)) {
         surplusTokens.push(token);
         surplusTokenSizes.push(tokenSurplusValue.toNumber());
-
-        if (debug && newWeights[i].spot === 0n) {
-          console.log(`        EJECTING ${token}:`);
-          console.log(`          assets[${i}]: ${_assets[i].toString()}`);
-          console.log(`          sellDownTo: ${sellDownTo.toString()}`);
-          console.log(`          surplusAmount: ${surplusAmount.toString()}`);
-          console.log(`          surplusValue: ${tokenSurplusValue.toString()}`);
-        }
       }
     }
   });
