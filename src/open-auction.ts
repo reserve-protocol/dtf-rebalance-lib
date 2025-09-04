@@ -343,20 +343,6 @@ export const getOpenAuction = (
   // EJECT -- used later to adjust weights.high and limits.high
   if (portionBeingEjected.gt(1e-5)) {
     round = AuctionRound.EJECT;
-
-    // if the ejections are mostly what's left, target JUST the ejection if that puts us at <100%
-    let ejectionTarget = progression.add(portionBeingEjected.mul(1.1)); // buy up to 10% extra
-    if (ejectionTarget.gt(target) && ejectionTarget.lt(ONE)) {
-      target = ejectionTarget;
-    }
-
-    if (debug) {
-      console.log("      EJECT round detected:");
-      console.log("        portionBeingEjected:", portionBeingEjected.toString());
-      console.log("        progression:", progression.toString());
-      console.log("        ejectionTarget:", ejectionTarget.toString());
-      console.log("        target:", target.toString());
-    }
   }
 
   if (target.lte(ZERO) || target.lt(initialProgression) || target.gt(ONE)) {
