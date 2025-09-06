@@ -263,10 +263,10 @@ export const getOpenAuction = (
   // calculate progressions
 
   // {wholeBU/wholeShare} = {USD/wholeShare} / {USD/wholeBU}
-  const spotLimit = shareValue.div(buValue);
+  const idealSpotLimit = shareValue.div(buValue);
 
   // {wholeTok/wholeShare} = {wholeTok/wholeBU} * {wholeBU/wholeShare}
-  const expectedBalances = weightRanges.map((weightRange) => weightRange.spot.mul(spotLimit));
+  const expectedBalances = weightRanges.map((weightRange) => weightRange.spot.mul(idealSpotLimit));
 
   // absoluteProgression
   // {1} = {USD/wholeShare} / {USD/wholeShare}
@@ -361,13 +361,16 @@ export const getOpenAuction = (
 
   // get new limits, constrained by extremes
 
+  const idealLowLimit = idealSpotLimit.mul(ONE.sub(delta));
+  const idealHighLimit = idealSpotLimit.mul(ONE.add(delta));
+
   // D18{BU/share} = {wholeBU/wholeShare} * D18 * {1}
   const newLimits = {
-    low: bn(spotLimit.sub(spotLimit.mul(delta)).mul(D18d)),
-    spot: bn(spotLimit.mul(D18d)),
+    low: bn(idealLowLimit.mul(D18d)),
+    spot: bn(idealSpotLimit.mul(D18d)),
 
     // hold non-eject surpluses aside if ejecting
-    high: round == AuctionRound.EJECT ? rebalance.limits.high : bn(spotLimit.add(spotLimit.mul(delta)).mul(D18d)),
+    high: round == AuctionRound.EJECT ? rebalance.limits.high : bn(idealHighLimit.mul(D18d)),
   };
 
   // low
@@ -418,7 +421,7 @@ export const getOpenAuction = (
     const newWeightsD27 = {
       low: bn(
         idealWeight
-          .mul(ONE.sub(delta).div(actualLimits.low.div(actualLimits.spot))) // add remaining delta into weight
+          .mul(idealLowLimit.div(actualLimits.low)) // add the portion of `delta` we failed to propagate through to the low limit
           .mul(D9d)
           .mul(decimalScale[i]),
       ),
@@ -430,7 +433,7 @@ export const getOpenAuction = (
           ? weightRange.high
           : bn(
               idealWeight
-                .mul(ONE.add(delta).div(actualLimits.high.div(actualLimits.spot))) // add remaining delta into weight
+                .mul(idealHighLimit.div(actualLimits.high)) // add the portion of `delta` we failed to propagate through to the high limit
                 .mul(D9d)
                 .mul(decimalScale[i]),
             ),
