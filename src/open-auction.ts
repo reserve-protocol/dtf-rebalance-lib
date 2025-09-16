@@ -552,7 +552,7 @@ export const getOpenAuction = (
       const tokenDeficitValue = deficitAmount.mul(prices[i]);
 
       // $1 minimum
-      if (tokenDeficitValue.gte(ONE)) {
+      if (round == AuctionRound.EJECT || tokenDeficitValue.gte(ONE)) {
         deficitTokens.push(token);
         deficitTokenSizes.push(tokenDeficitValue.toNumber());
       }
@@ -564,7 +564,7 @@ export const getOpenAuction = (
       const tokenSurplusValue = surplusAmount.mul(prices[i]);
 
       // $1 minimum
-      if (tokenSurplusValue.gte(ONE)) {
+      if (round == AuctionRound.EJECT || tokenSurplusValue.gte(ONE)) {
         surplusTokens.push(token);
         surplusTokenSizes.push(tokenSurplusValue.toNumber());
       }
