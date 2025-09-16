@@ -545,7 +545,7 @@ export const getOpenAuction = (
     const sellDownTo = (newWeights[i].high * newLimits.high * _supply + (D18n * D27n - 1n)) / D18n / D27n;
 
     // {USD}
-    const tradeThreshold = round == AuctionRound.EJECT ? ONE : ZERO;
+    const tradeThreshold = round == AuctionRound.EJECT ? ZERO : ONE;
 
     if (_assets[i] < buyUpTo) {
       // {wholeTok} = {tok} / {tok/wholeTok}
