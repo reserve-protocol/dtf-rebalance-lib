@@ -544,6 +544,9 @@ export const getOpenAuction = (
     const buyUpTo = (newWeights[i].low * newLimits.low * _supply) / D18n / D27n;
     const sellDownTo = (newWeights[i].high * newLimits.high * _supply + (D18n * D27n - 1n)) / D18n / D27n;
 
+    // {USD}
+    const tradeThreshold = round == AuctionRound.EJECT ? ONE : ZERO;
+
     if (_assets[i] < buyUpTo) {
       // {wholeTok} = {tok} / {tok/wholeTok}
       const deficitAmount = new Decimal((buyUpTo - _assets[i]).toString()).div(decimalScale[i]);
@@ -552,7 +555,7 @@ export const getOpenAuction = (
       const tokenDeficitValue = deficitAmount.mul(prices[i]);
 
       // $1 minimum
-      if (round == AuctionRound.EJECT || tokenDeficitValue.gte(ONE)) {
+      if (tokenDeficitValue.gt(tradeThreshold)) {
         deficitTokens.push(token);
         deficitTokenSizes.push(tokenDeficitValue.toNumber());
       }
@@ -564,7 +567,7 @@ export const getOpenAuction = (
       const tokenSurplusValue = surplusAmount.mul(prices[i]);
 
       // $1 minimum
-      if (round == AuctionRound.EJECT || tokenSurplusValue.gte(ONE)) {
+      if (tokenSurplusValue.gt(tradeThreshold)) {
         surplusTokens.push(token);
         surplusTokenSizes.push(tokenSurplusValue.toNumber());
       }
