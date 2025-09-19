@@ -1,7 +1,7 @@
 import { Decimal } from "./utils";
 import type { Decimal as DecimalType } from "decimal.js-light";
 
-import { bn, D9d, D18d, D27d, ONE, ZERO, D18n, D27n } from "./numbers";
+import { bn, D9d, D18d, D27d, ONE, ZERO, D18n, D27n, EPSILON } from "./numbers";
 
 import { PriceControl, PriceRange, Rebalance, RebalanceLimits, WeightRange } from "./types";
 
@@ -276,14 +276,17 @@ export const getOpenAuction = (
         return ZERO;
       }
 
+      if (expectedBalances[i].eq(ZERO)) {
+        return ONE;
+      }
+
       // {wholeTok/wholeShare}
       const balanceInBasket = expectedBalances[i].gt(actualBalance) ? actualBalance : expectedBalances[i];
 
-      // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
-      return balanceInBasket.mul(prices[i]);
+      // {1} = {wholeTok/wholeShare} / {wholeTok/wholeShare}
+      return balanceInBasket.div(expectedBalances[i]);
     })
-    .reduce((a, b) => a.add(b))
-    .div(shareValue);
+    .reduce((a, b) => (a.lt(b) ? a : b));
 
   // absolute
   // {1} = {USD/wholeShare} / {USD/wholeShare}
@@ -296,11 +299,10 @@ export const getOpenAuction = (
       // {wholeTok/wholeShare}
       const balanceInBasket = expectedBalances[i].gt(initialBalance) ? initialBalance : expectedBalances[i];
 
-      // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
-      return balanceInBasket.mul(prices[i]);
+      // {1} = {wholeTok/wholeShare} / {wholeTok/wholeShare}
+      return balanceInBasket.div(expectedBalances[i]);
     })
-    .reduce((a, b) => a.add(b))
-    .div(shareValue);
+    .reduce((a, b) => (a.lt(b) ? a : b));
 
   if (progression < initialProgression) {
     if (debug) {
@@ -331,7 +333,7 @@ export const getOpenAuction = (
 
     target = initialProgression.add(ONE.sub(initialProgression).mul(finalStageAt));
 
-    if (target.gt(ONE.sub(1e-5))) {
+    if (target.gt(ONE.sub(EPSILON))) {
       target = ONE;
     }
 
@@ -341,7 +343,7 @@ export const getOpenAuction = (
   }
 
   // EJECT -- used later to adjust weights.high and limits.high
-  if (portionBeingEjected.gt(1e-5)) {
+  if (portionBeingEjected.gt(EPSILON) && target.lt(ONE.sub(EPSILON))) {
     round = AuctionRound.EJECT;
   }
 
@@ -544,9 +546,6 @@ export const getOpenAuction = (
     const buyUpTo = (newWeights[i].low * newLimits.low * _supply) / D18n / D27n;
     const sellDownTo = (newWeights[i].high * newLimits.high * _supply + (D18n * D27n - 1n)) / D18n / D27n;
 
-    // {USD}
-    const tradeThreshold = round == AuctionRound.EJECT ? ZERO : ONE;
-
     if (_assets[i] < buyUpTo) {
       // {wholeTok} = {tok} / {tok/wholeTok}
       const deficitAmount = new Decimal((buyUpTo - _assets[i]).toString()).div(decimalScale[i]);
@@ -554,8 +553,7 @@ export const getOpenAuction = (
       // {USD} = {wholeTok} * {USD/wholeTok}
       const tokenDeficitValue = deficitAmount.mul(prices[i]);
 
-      // $1 minimum
-      if (tokenDeficitValue.gt(tradeThreshold)) {
+      if (tokenDeficitValue.gt(EPSILON)) {
         deficitTokens.push(token);
         deficitTokenSizes.push(tokenDeficitValue.toNumber());
       }
@@ -566,8 +564,7 @@ export const getOpenAuction = (
       // {USD} = {wholeTok} * {USD/wholeTok}
       const tokenSurplusValue = surplusAmount.mul(prices[i]);
 
-      // $1 minimum
-      if (tokenSurplusValue.gt(tradeThreshold)) {
+      if (tokenSurplusValue.gt(EPSILON)) {
         surplusTokens.push(token);
         surplusTokenSizes.push(tokenSurplusValue.toNumber());
       }
@@ -577,14 +574,6 @@ export const getOpenAuction = (
   const surplusSize = surplusTokenSizes.reduce((a, b) => a + b, 0);
   const deficitSize = deficitTokenSizes.reduce((a, b) => a + b, 0);
   const auctionSize = surplusSize > deficitSize ? deficitSize : surplusSize;
-
-  // update targeting estimates
-
-  // {1} = {1} + {USD} / ({share} * {USD/share})
-  const adjustedTarget = progression.add(new Decimal(auctionSize).div(shareValue.mul(supply)));
-  if (adjustedTarget.lte(ONE)) {
-    target = adjustedTarget;
-  }
 
   const relativeTarget = target.sub(initialProgression).div(ONE.sub(initialProgression));
 

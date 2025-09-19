@@ -313,16 +313,16 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("500000000000000000000000000"),
             spot: bn("500000000000000000000000000"),
-            high: initialWeightsS1[1].high, // Keep original high weight unchanged during ejection
+            high: bn("500000000000000000000000000"),
           },
           {
             low: bn("500000000000000"),
             spot: bn("500000000000000"),
-            high: initialWeightsS1[2].high, // Keep original high weight unchanged during ejection
+            high: bn("500000000000000"),
           },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
-        newLimits: { low: bn("1e18"), spot: bn("1e18"), high: bn("1e18") }, // Updated: implementation returns 1e18
+        newLimits: { low: bn("1e18"), spot: bn("1e18"), high: bn("1e18") },
       });
     });
 
@@ -434,12 +434,12 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("500000000000000000000000000"),
             spot: bn("500000000000000000000000000"),
-            high: initialWeightsS1[1].high, // Current implementation preserves original high
+            high: bn("500000000000000000000000000"),
           },
           {
             low: bn("500000000000000"),
             spot: bn("500000000000000"),
-            high: initialWeightsS1[2].high, // Current implementation preserves original high
+            high: bn("500000000000000"),
           },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT, // All token prices
@@ -640,13 +640,13 @@ describe("NATIVE DTFs", () => {
           {
             low: bn("1000000000000000"),
             spot: bn("1000000000000000"),
-            high: initialWeightsS2[0].high, // Keep original high weight unchanged during ejection
+            high: bn("1000000000000000"),
           },
           initialWeightsS2[1],
           initialWeightsS2[2],
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
-        newLimits: { low: bn("1e18"), spot: bn("1e18"), high: bn("1e18") }, // Updated: implementation returns 1e18
+        newLimits: { low: bn("1e18"), spot: bn("1e18"), high: bn("1e18") },
       });
     });
 
@@ -691,7 +691,7 @@ describe("NATIVE DTFs", () => {
           initialWeightsS2[2],
         ],
         newPrices: expectedNewPricesGainUSDC,
-        newLimits: { low: bn("1e18"), spot: bn("1e18"), high: bn("1e18") }, // Updated: implementation returns 1e18
+        newLimits: { low: bn("1e18"), spot: bn("1e18"), high: bn("1e18") },
       });
     });
 
@@ -760,7 +760,7 @@ describe("NATIVE DTFs", () => {
         rebalanceNonce: 2n,
         tokens: tokens, // All tokens are returned
         newWeights: [
-          { low: bn("1000000000000000"), spot: bn("1000000000000000"), high: initialWeightsS2[0].high },
+          { low: bn("1000000000000000"), spot: bn("1000000000000000"), high: bn("1000000000000000") },
           initialWeightsS2[1], // DAI: unchanged (still 0)
           initialWeightsS2[2], // USDT: unchanged (still 0)
         ],

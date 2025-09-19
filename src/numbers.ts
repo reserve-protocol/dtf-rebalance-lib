@@ -13,6 +13,7 @@ export const D18d: DecimalType = new Decimal("1e18");
 export const D9d: DecimalType = new Decimal("1e9");
 
 export const ZERO = new Decimal("0");
+export const EPSILON = new Decimal("1e-5");
 export const ONE = new Decimal("1");
 export const TWO = new Decimal("2");
 

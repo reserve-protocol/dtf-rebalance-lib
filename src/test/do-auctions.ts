@@ -5,7 +5,7 @@ import { expect } from "chai";
 import { Contract } from "ethers";
 
 import { whileImpersonating, toPlainObject, createPriceLookup, logPercentages } from "./utils";
-import { AuctionMetrics, AuctionRound, getOpenAuction, getTargetBasket } from "../open-auction";
+import { AuctionMetrics, AuctionRound, OpenAuctionArgs, getOpenAuction, getTargetBasket } from "../open-auction";
 import { PriceRange, WeightRange } from "../types";
 import { RebalanceContracts, RebalanceSigners, RebalanceInitialState } from "./setup-rebalance";
 import { bn } from "../numbers";
@@ -123,7 +123,7 @@ export async function doAuctions(
     return buyValue > sellValue ? sellValue : buyValue;
   };
 
-  const doAuction = async (auctionNumber: number): Promise<AuctionMetrics> => {
+  const doAuction = async (auctionNumber: number): Promise<[OpenAuctionArgs, AuctionMetrics]> => {
     const rebalanceState = await folio.getRebalance();
     // can have fewer tokens than rebalanceTokens, because some have been successfully ejected
 
@@ -261,7 +261,7 @@ export async function doAuctions(
     );
 
     if (openAuctionArgsLocal.tokens.length == 0) {
-      return auctionMetrics;
+      return [openAuctionArgsLocal, auctionMetrics];
     }
 
     // openAuction()
@@ -342,28 +342,29 @@ export async function doAuctions(
     await hre.network.provider.send("evm_setNextBlockTimestamp", [(end + 1n).toString()]);
     await hre.network.provider.send("evm_mine", []);
 
-    return auctionMetrics;
+    return [openAuctionArgsLocal, auctionMetrics];
   };
 
   // Track total value rebalanced across all auctions
   let totalRebalancedValue = 0;
 
   // ROUND 1
-  let auctionMetrics = await doAuction(1);
+  let [openAuctionArgsLocal, auctionMetrics] = await doAuction(1);
 
   const TOLERANCE = 1e-5;
 
   // ROUND 2
   if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - TOLERANCE) {
-    auctionMetrics = await doAuction(2);
+    [openAuctionArgsLocal, auctionMetrics] = await doAuction(2);
   }
 
   // ROUND 3
   if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - TOLERANCE) {
-    auctionMetrics = await doAuction(3);
+    [openAuctionArgsLocal, auctionMetrics] = await doAuction(3);
   }
 
   if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - TOLERANCE) {
+    console.log("openAuctionArgsLocal", openAuctionArgsLocal);
     console.log("auctionMetrics", auctionMetrics);
     throw new Error("did not finish rebalancing after 3 auctions");
   }
