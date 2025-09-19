@@ -296,6 +296,10 @@ export const getOpenAuction = (
         return ZERO;
       }
 
+      if (expectedBalances[i].eq(ZERO)) {
+        return ONE;
+      }
+
       // {wholeTok/wholeShare}
       const balanceInBasket = expectedBalances[i].gt(initialBalance) ? initialBalance : expectedBalances[i];
 
