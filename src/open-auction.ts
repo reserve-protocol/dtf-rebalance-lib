@@ -272,11 +272,7 @@ export const getOpenAuction = (
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   let progression = folio
     .map((actualBalance, i) => {
-      if (!rebalance.inRebalance[i]) {
-        return ZERO;
-      }
-
-      if (expectedBalances[i].eq(ZERO)) {
+      if (!rebalance.inRebalance[i] || expectedBalances[i].eq(ZERO)) {
         return ONE;
       }
 
@@ -292,11 +288,7 @@ export const getOpenAuction = (
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   const initialProgression = initialFolio
     .map((initialBalance, i) => {
-      if (!rebalance.inRebalance[i]) {
-        return ZERO;
-      }
-
-      if (expectedBalances[i].eq(ZERO)) {
+      if (!rebalance.inRebalance[i] || expectedBalances[i].eq(ZERO)) {
         return ONE;
       }
 
