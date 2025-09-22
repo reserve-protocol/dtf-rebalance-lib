@@ -373,23 +373,19 @@ export const getOpenAuction = (
     high: round == AuctionRound.EJECT ? rebalance.limits.high : bn(idealHighLimit.mul(D18d)),
   };
 
-  // low
+  // enforce in range
   if (newLimits.low < rebalance.limits.low) {
     newLimits.low = rebalance.limits.low;
   }
   if (newLimits.low > rebalance.limits.high) {
     newLimits.low = rebalance.limits.high;
   }
-
-  // spot
   if (newLimits.spot < rebalance.limits.low) {
     newLimits.spot = rebalance.limits.low;
   }
   if (newLimits.spot > rebalance.limits.high) {
     newLimits.spot = rebalance.limits.high;
   }
-
-  // high
   if (newLimits.high < rebalance.limits.low) {
     newLimits.high = rebalance.limits.low;
   }
@@ -439,6 +435,15 @@ export const getOpenAuction = (
             ),
     };
 
+    // enforce relative ordering
+    if (newWeightsD27.low > newWeightsD27.spot) {
+      newWeightsD27.low = newWeightsD27.spot;
+    }
+    if (newWeightsD27.spot > newWeightsD27.high) {
+      newWeightsD27.high = newWeightsD27.spot;
+    }
+
+    // enforce in range
     if (newWeightsD27.low < weightRange.low) {
       newWeightsD27.low = weightRange.low;
     } else if (newWeightsD27.low > weightRange.high) {
