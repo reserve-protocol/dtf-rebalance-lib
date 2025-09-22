@@ -272,33 +272,35 @@ export const getOpenAuction = (
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   const progression = folio
     .map((actualBalance, i) => {
-      if (!rebalance.inRebalance[i] || expectedBalances[i].eq(ZERO)) {
-        return ONE;
+      if (!rebalance.inRebalance[i]) {
+        return ZERO;
       }
 
       // {wholeTok/wholeShare}
       const balanceInBasket = expectedBalances[i].gt(actualBalance) ? actualBalance : expectedBalances[i];
 
-      // {1} = {wholeTok/wholeShare} / {wholeTok/wholeShare}
-      return balanceInBasket.div(expectedBalances[i]);
+      // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
+      return balanceInBasket.mul(prices[i]);
     })
-    .reduce((a, b) => (a.lt(b) ? a : b));
+    .reduce((a, b) => a.add(b))
+    .div(shareValue);
 
   // absolute
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   let initialProgression = initialFolio
     .map((initialBalance, i) => {
-      if (!rebalance.inRebalance[i] || expectedBalances[i].eq(ZERO)) {
-        return ONE;
+      if (!rebalance.inRebalance[i]) {
+        return ZERO;
       }
 
       // {wholeTok/wholeShare}
       const balanceInBasket = expectedBalances[i].gt(initialBalance) ? initialBalance : expectedBalances[i];
 
-      // {1} = {wholeTok/wholeShare} / {wholeTok/wholeShare}
-      return balanceInBasket.div(expectedBalances[i]);
+      // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
+      return balanceInBasket.mul(prices[i]);
     })
-    .reduce((a, b) => (a.lt(b) ? a : b));
+    .reduce((a, b) => a.add(b))
+    .div(shareValue);
 
   if (progression < initialProgression) {
     if (debug) {
@@ -570,6 +572,14 @@ export const getOpenAuction = (
   const surplusSize = surplusTokenSizes.reduce((a, b) => a + b, 0);
   const deficitSize = deficitTokenSizes.reduce((a, b) => a + b, 0);
   const auctionSize = surplusSize > deficitSize ? deficitSize : surplusSize;
+
+  // update targeting estimates
+
+  // {1} = {1} + {USD} / ({share} * {USD/share})
+  const adjustedTarget = progression.add(new Decimal(auctionSize).div(shareValue.mul(supply)));
+  if (adjustedTarget.lte(ONE)) {
+    target = adjustedTarget;
+  }
 
   const relativeTarget = target.sub(initialProgression).div(ONE.sub(initialProgression));
 
