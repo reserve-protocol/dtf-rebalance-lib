@@ -270,7 +270,7 @@ export const getOpenAuction = (
 
   // absoluteProgression
   // {1} = {USD/wholeShare} / {USD/wholeShare}
-  let progression = folio
+  const progression = folio
     .map((actualBalance, i) => {
       if (!rebalance.inRebalance[i] || expectedBalances[i].eq(ZERO)) {
         return ONE;
@@ -286,7 +286,7 @@ export const getOpenAuction = (
 
   // absolute
   // {1} = {USD/wholeShare} / {USD/wholeShare}
-  const initialProgression = initialFolio
+  let initialProgression = initialFolio
     .map((initialBalance, i) => {
       if (!rebalance.inRebalance[i] || expectedBalances[i].eq(ZERO)) {
         return ONE;
@@ -304,7 +304,7 @@ export const getOpenAuction = (
     if (debug) {
       console.log("progression < initialProgression", progression.toString(), initialProgression.toString());
     }
-    progression = initialProgression; // don't go backwards, should only happen due to negligible rounding errors
+    initialProgression = progression; // don't go backwards, should only happen due to negligible rounding errors
   }
 
   // {1} = {1} / {1}
