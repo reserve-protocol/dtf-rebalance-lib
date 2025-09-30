@@ -1,7 +1,7 @@
 import { Decimal } from "./utils";
 import type { Decimal as DecimalType } from "decimal.js-light";
 
-import { bn, D9d, D18d, D27d, D27n, ONE, ZERO } from "./numbers";
+import { bn, D9d, D18d, D27d, D18n, D27n, ONE, ZERO } from "./numbers";
 
 import { PriceRange, RebalanceLimits, WeightRange } from "./types";
 
@@ -143,11 +143,27 @@ export const getStartRebalance = (
     // D27{wholeTok/tok} = D27 / {tok/wholeTok}
     const priceMultiplier = D27d.div(new Decimal(`1e${decimals[i]}`));
 
+    // D27{nanoUSD/tok} = {USD/wholeTok} * {1} * D27{wholeTok/tok} * {nanoUSD/USD}
+    const low = bn(prices[i].mul(ONE.sub(priceError[i])).mul(priceMultiplier).mul(D9d));
+    let high = bn(prices[i].div(ONE.sub(priceError[i])).mul(priceMultiplier).mul(D9d));
+
+    // check if prices are valid
+    if (low < 0n || low > high || high > D18n * D27n) {
+      throw new Error(`invalid prices for token ${tokens[i]}: low: ${low}, high: ${high}`);
+    }
+
+    // constrain price range if too large, but not by more than 10%
+    if (high > low * 110n) {
+      throw new Error(`invalid price range for token ${tokens[i]}: low: ${low}, high: ${high}`);
+    }
+
+    if (high > low * 100n) {
+      high = low * 100n;
+    }
+
     newPrices.push({
-      // D27{nanoUSD/tok} = {USD/wholeTok} * {1} * D27{wholeTok/tok} * {nanoUSD/USD}
-      low: bn(prices[i].mul(ONE.sub(priceError[i])).mul(priceMultiplier).mul(D9d)),
-      // D27{nanoUSD/tok} = {USD/wholeTok} / {1} * D27{wholeTok/tok} * {nanoUSD/USD}
-      high: bn(prices[i].div(ONE.sub(priceError[i])).mul(priceMultiplier).mul(D9d)),
+      low: low,
+      high: high,
     });
   }
 
