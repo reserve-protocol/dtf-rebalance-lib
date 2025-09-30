@@ -89,9 +89,11 @@ export const getStartRebalance = (
   const newWeights: WeightRange[] = [];
   const newPrices: PriceRange[] = [];
 
+  const maxPriceError = new Decimal("0.9");
+
   for (let i = 0; i < tokens.length; i++) {
-    if (priceError[i].gte(ONE)) {
-      throw new Error("price error >= 1");
+    if (priceError[i].gt(maxPriceError)) {
+      throw new Error("price error > 0.9");
     }
 
     // === newWeights ===
@@ -145,19 +147,20 @@ export const getStartRebalance = (
 
     // D27{nanoUSD/tok} = {USD/wholeTok} * {1} * D27{wholeTok/tok} * {nanoUSD/USD}
     const low = bn(prices[i].mul(ONE.sub(priceError[i])).mul(priceMultiplier).mul(D9d));
-    let high = bn(prices[i].div(ONE.sub(priceError[i])).mul(priceMultiplier).mul(D9d));
+    let high = bn(prices[i].div(ONE.sub(priceError[i])).mul(priceMultiplier).mul(D9d)) + 1n;
 
     // check if prices are valid
     if (low < 0n || low > high || high > D18n * D27n) {
       throw new Error(`invalid prices for token ${tokens[i]}: low: ${low}, high: ${high}`);
     }
 
-    // constrain price range if too large, but not by more than 10%
-    if (high > low * 110n) {
-      throw new Error(`invalid price range for token ${tokens[i]}: low: ${low}, high: ${high}`);
-    }
-
+    // due to floor rounding `low`, `high` can be slightly more than 100x even at 0.9 price error
     if (high > low * 100n) {
+      // keep consistent geometric mean
+      if (high > low * 100n + 100n) {
+        throw new Error("something has gone very wrong");
+      }
+
       high = low * 100n;
     }
 
