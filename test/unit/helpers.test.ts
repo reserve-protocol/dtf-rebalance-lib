@@ -89,7 +89,7 @@ describe("NATIVE DTFs", () => {
     let initialWeightsS1: WeightRange[], initialPricesS1: PriceRange[], initialLimitsS1: RebalanceLimits;
 
     beforeEach(() => {
-      const { weights, prices, limits } = getStartRebalance(
+      const { tokens: tokensParams, limits } = getStartRebalance(
         supply,
         tokens,
         initialFolioS1,
@@ -100,19 +100,18 @@ describe("NATIVE DTFs", () => {
         true, // weightControl: true for NATIVE-style
         false, // deferWeights
       );
-      initialWeightsS1 = weights;
-      initialPricesS1 = prices;
+      initialWeightsS1 = tokensParams.map(t => t.weight);
+      initialPricesS1 = tokensParams.map(t => t.price);
       initialLimitsS1 = limits;
       mockRebalanceBaseS1 = {
         nonce: 1n,
-        tokens: tokens,
-        weights: initialWeightsS1, // These are the NATIVE rebalance.weights used for clamping
-        initialPrices: initialPricesS1,
-        inRebalance: tokens.map(() => true),
+        tokens: tokensParams, // Now an array of TokenRebalanceParams
         limits: initialLimitsS1, // NATIVE limits are {1e18, 1e18, 1e18}, crucial for newLimits clamping
-        startedAt: 0n,
-        restrictedUntil: 0n,
-        availableUntil: 0n,
+        timestamps: {
+          startedAt: 0n,
+          restrictedUntil: 0n,
+          availableUntil: 0n,
+        },
       };
     });
 
@@ -179,8 +178,7 @@ describe("NATIVE DTFs", () => {
     it("Step 1b: Ejection Phase with deferWeights (initial folio, priceControl=true, prices=[1,1,1])", () => {
       // Setup with deferWeights: true
       const {
-        weights: weightsDeferred,
-        prices: pricesDeferred,
+        tokens: tokensDeferred,
         limits: limitsDeferred,
       } = getStartRebalance(
         supply,
@@ -193,6 +191,8 @@ describe("NATIVE DTFs", () => {
         true, // weightControl
         true, // deferWeights: true
       );
+
+      const weightsDeferred = tokensDeferred.map(t => t.weight);
 
       // Verify that deferWeights set the weights and limits correctly
       assert.equal(weightsDeferred[0].low, 0n); // USDC target is 0, so low stays 0
@@ -210,8 +210,7 @@ describe("NATIVE DTFs", () => {
       // Create mockRebalance with these weights
       const mockRebalanceDeferred: Rebalance = {
         ...mockRebalanceBaseS1,
-        weights: weightsDeferred,
-        initialPrices: pricesDeferred,
+        tokens: tokensDeferred,
         limits: limitsDeferred,
         priceControl: PriceControl.PARTIAL,
       };
@@ -504,7 +503,7 @@ describe("NATIVE DTFs", () => {
     let initialWeightsS2: WeightRange[], initialPricesS2: PriceRange[], initialLimitsS2: RebalanceLimits;
 
     beforeEach(() => {
-      const { weights, prices, limits } = getStartRebalance(
+      const { tokens: tokensParams, limits } = getStartRebalance(
         supply,
         tokens,
         initialFolioS2,
@@ -515,19 +514,18 @@ describe("NATIVE DTFs", () => {
         true,
         false, // deferWeights
       );
-      initialWeightsS2 = weights;
-      initialPricesS2 = prices;
+      initialWeightsS2 = tokensParams.map(t => t.weight);
+      initialPricesS2 = tokensParams.map(t => t.price);
       initialLimitsS2 = limits;
       mockRebalanceBaseS2 = {
         nonce: 2n, // Different nonce for this scenario suite
-        tokens: tokens,
-        weights: initialWeightsS2,
-        initialPrices: initialPricesS2,
-        inRebalance: tokens.map(() => true),
+        tokens: tokensParams,
         limits: initialLimitsS2,
-        startedAt: 0n,
-        restrictedUntil: 0n,
-        availableUntil: 0n,
+        timestamps: {
+          startedAt: 0n,
+          restrictedUntil: 0n,
+          availableUntil: 0n,
+        },
       };
     });
 
@@ -778,9 +776,8 @@ describe("NATIVE DTFs", () => {
     const targetBasket = [bn("0.75e18"), bn("0.25e18")];
     const initialFolio = [bn("1e6"), bn("0")]; // Represents 1 USDC, 0 ETH
     const {
-      weights: newWeights,
-      prices: newPricesResult, // renamed to avoid clash
-      limits: newLimitsResult, // renamed
+      tokens: tokensResult,
+      limits: newLimitsResult,
     } = getStartRebalance(
       supply,
       tokens,
@@ -792,6 +789,9 @@ describe("NATIVE DTFs", () => {
       true, // weightControl: true
       false, // deferWeights
     );
+    const newWeights = tokensResult.map(t => t.weight);
+    const newPricesResult = tokensResult.map(t => t.price);
+
     assert.equal(newWeights.length, 2);
     assert.equal(newPricesResult.length, 2);
 
@@ -853,8 +853,7 @@ describe("NATIVE DTFs", () => {
       const targetBasket = getBasketDistribution(bals, prices, currentDecimals);
 
       const {
-        weights: newWeights,
-        prices: newPricesResult,
+        tokens: tokensResult,
         limits: newLimitsResult,
       } = getStartRebalance(
         supply,
@@ -867,6 +866,9 @@ describe("NATIVE DTFs", () => {
         true, // weightControl: true
         false, // deferWeights
       );
+      const newWeights = tokensResult.map(t => t.weight);
+      const newPricesResult = tokensResult.map(t => t.price);
+
       assert.equal(newWeights.length, currentTokens.length);
       assert.equal(newPricesResult.length, currentTokens.length);
       assert(newLimitsResult !== undefined, "newLimitsResult should be defined");
@@ -888,8 +890,7 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
   const _folioUSDCStart = [bn("1e6"), bn("0"), bn("0")]; // 100% USDC, use as initialFolio for this sequence
 
   const {
-    weights: initialWeightsTracking,
-    prices: initialPricesTracking,
+    tokens: tokensTracking,
     limits: initialLimitsTracking,
   } = getStartRebalance(
     supply,
@@ -902,6 +903,9 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
     false, // weightControl: false for TRACKING-style weights and limits
     false, // deferWeights
   );
+
+  const initialWeightsTracking = tokensTracking.map(t => t.weight);
+  const initialPricesTracking = tokensTracking.map(t => t.price);
 
   it("Step 0: Verifies initial setup from getStartRebalance (TRACKING)", () => {
     // totalPortion = (0*0.1) + (0.5*0.1) + (0.5*0.1) = 0.1
@@ -947,14 +951,13 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
 
   const mockRebalanceBase: Omit<Rebalance, "priceControl"> = {
     nonce: 2n, // Different nonce for this suite
-    tokens: tokens,
-    weights: initialWeightsTracking,
-    initialPrices: initialPricesTracking,
-    inRebalance: tokens.map(() => true),
+    tokens: tokensTracking,
     limits: initialLimitsTracking,
-    startedAt: 0n,
-    restrictedUntil: 0n,
-    availableUntil: 0n,
+    timestamps: {
+      startedAt: 0n,
+      restrictedUntil: 0n,
+      availableUntil: 0n,
+    },
   };
 
   it("Step 1: Auction for Ejection Phase", () => {
@@ -1137,17 +1140,28 @@ describe("Price Edge Cases in getOpenAuction", () => {
 
     const mockRebalanceEdge: Rebalance = {
       nonce: 4n,
-      tokens: tokens,
-      weights: [
-        { low: bn("4.5e14"), spot: bn("5e14"), high: bn("5.5e14") },
-        { low: bn("4.5e26"), spot: bn("5e26"), high: bn("5.5e26") },
+      tokens: [
+        {
+          token: tokens[0],
+          weight: { low: bn("4.5e14"), spot: bn("5e14"), high: bn("5.5e14") },
+          price: initialPricesNarrowUSDC[0],
+          maxAuctionSize: 2n**256n - 1n,
+          inRebalance: true,
+        },
+        {
+          token: tokens[1],
+          weight: { low: bn("4.5e26"), spot: bn("5e26"), high: bn("5.5e26") },
+          price: initialPricesNarrowUSDC[1],
+          maxAuctionSize: 2n**256n - 1n,
+          inRebalance: true,
+        },
       ],
-      initialPrices: initialPricesNarrowUSDC,
-      inRebalance: tokens.map(() => true),
       limits: { low: bn("1"), spot: bn("1e18"), high: bn("1e36") }, // Wide limits
-      startedAt: 0n,
-      restrictedUntil: 0n,
-      availableUntil: 0n,
+      timestamps: {
+        startedAt: 0n,
+        restrictedUntil: 0n,
+        availableUntil: 0n,
+      },
       priceControl: PriceControl.PARTIAL,
     };
 
@@ -1187,17 +1201,28 @@ describe("Price Edge Cases in getOpenAuction", () => {
 
     const mockRebalanceEdge: Rebalance = {
       nonce: 5n,
-      tokens: tokens,
-      weights: [
-        { low: bn("4.5e14"), spot: bn("5e14"), high: bn("5.5e14") },
-        { low: bn("4.5e26"), spot: bn("5e26"), high: bn("5.5e26") },
+      tokens: [
+        {
+          token: tokens[0],
+          weight: { low: bn("4.5e14"), spot: bn("5e14"), high: bn("5.5e14") },
+          price: initialPricesSameValue[0],
+          maxAuctionSize: 2n**256n - 1n,
+          inRebalance: true,
+        },
+        {
+          token: tokens[1],
+          weight: { low: bn("4.5e26"), spot: bn("5e26"), high: bn("5.5e26") },
+          price: initialPricesSameValue[1],
+          maxAuctionSize: 2n**256n - 1n,
+          inRebalance: true,
+        },
       ],
-      initialPrices: initialPricesSameValue,
-      inRebalance: tokens.map(() => true),
       limits: { low: bn("1"), spot: bn("1e18"), high: bn("1e36") }, // Wide limits
-      startedAt: 0n,
-      restrictedUntil: 0n,
-      availableUntil: 0n,
+      timestamps: {
+        startedAt: 0n,
+        restrictedUntil: 0n,
+        availableUntil: 0n,
+      },
       priceControl: PriceControl.PARTIAL,
     };
 
@@ -1266,18 +1291,35 @@ describe("Price Edge Cases in getOpenAuction", () => {
 
     const mockRebalance: Rebalance = {
       nonce: 1n,
-      tokens: tokens,
-      weights: targetWeights,
-      initialPrices: [
-        { low: bn("9e29"), high: bn("1.11e30") }, // USDC
-        { low: bn("9e17"), high: bn("1.11e18") }, // DAI
-        { low: bn("9e29"), high: bn("1.11e30") }, // USDT
+      tokens: [
+        {
+          token: tokens[0],
+          weight: targetWeights[0],
+          price: { low: bn("9e29"), high: bn("1.11e30") }, // USDC
+          maxAuctionSize: 2n**256n - 1n,
+          inRebalance: true,
+        },
+        {
+          token: tokens[1],
+          weight: targetWeights[1],
+          price: { low: bn("9e17"), high: bn("1.11e18") }, // DAI
+          maxAuctionSize: 2n**256n - 1n,
+          inRebalance: true,
+        },
+        {
+          token: tokens[2],
+          weight: targetWeights[2],
+          price: { low: bn("9e29"), high: bn("1.11e30") }, // USDT
+          maxAuctionSize: 2n**256n - 1n,
+          inRebalance: true,
+        },
       ],
-      inRebalance: [true, true, true],
       limits: { low: bn("1e17"), spot: bn("1e18"), high: bn("1e19") },
-      startedAt: 0n,
-      restrictedUntil: 0n,
-      availableUntil: 0n,
+      timestamps: {
+        startedAt: 0n,
+        restrictedUntil: 0n,
+        availableUntil: 0n,
+      },
       priceControl: PriceControl.PARTIAL,
     };
 

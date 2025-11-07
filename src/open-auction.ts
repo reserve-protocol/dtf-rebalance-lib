@@ -3,7 +3,7 @@ import type { Decimal as DecimalType } from "decimal.js-light";
 
 import { bn, D9d, D18d, D27d, ONE, ZERO, D18n, D27n, EPSILON } from "./numbers";
 
-import { PriceControl, PriceRange, Rebalance, RebalanceLimits, WeightRange } from "./types";
+import { PriceControl, PriceRange, Rebalance, RebalanceLimits, TokenRebalanceParams, WeightRange } from "./types";
 
 // Call `getOpenAuction()` to get the current auction round
 export enum AuctionRound {
@@ -191,11 +191,11 @@ export const getOpenAuction = (
   const folio = _assets.map((bal: bigint, i: number) => new Decimal(bal.toString()).div(decimalScale[i]).div(supply));
 
   // {wholeTok/wholeBU} = D27{tok/BU} * {BU/wholeBU} / {tok/wholeTok} / D27
-  let weightRanges = rebalance.weights.map((range: WeightRange, i: number) => {
+  let weightRanges = rebalance.tokens.map((params: TokenRebalanceParams, i: number) => {
     return {
-      low: new Decimal(range.low.toString()).div(decimalScale[i]).div(D9d),
-      spot: new Decimal(range.spot.toString()).div(decimalScale[i]).div(D9d),
-      high: new Decimal(range.high.toString()).div(decimalScale[i]).div(D9d),
+      low: new Decimal(params.weight.low.toString()).div(decimalScale[i]).div(D9d),
+      spot: new Decimal(params.weight.spot.toString()).div(decimalScale[i]).div(D9d),
+      high: new Decimal(params.weight.high.toString()).div(decimalScale[i]).div(D9d),
     };
   });
 
@@ -208,7 +208,7 @@ export const getOpenAuction = (
   // {USD/wholeShare} = {wholeTok/wholeShare} * {USD/wholeTok}
   const shareValue = folio
     .map((f: DecimalType, i: number) => {
-      if (!rebalance.inRebalance[i]) {
+      if (!rebalance.tokens[i].inRebalance) {
         return ZERO;
       }
 
@@ -219,7 +219,7 @@ export const getOpenAuction = (
   // {USD/wholeBU} = {wholeTok/wholeBU} * {USD/wholeTok}
   const buValue = weightRanges
     .map((weightRange, i) => {
-      if (!rebalance.inRebalance[i]) {
+      if (!rebalance.tokens[i].inRebalance) {
         return ZERO;
       }
 
@@ -244,8 +244,8 @@ export const getOpenAuction = (
   // calculate portionBeingEjected
 
   const ejectionIndices: number[] = [];
-  for (let i = 0; i < rebalance.weights.length; i++) {
-    if (rebalance.inRebalance[i] && rebalance.weights[i].spot == 0n) {
+  for (let i = 0; i < rebalance.tokens.length; i++) {
+    if (rebalance.tokens[i].inRebalance && rebalance.tokens[i].weight.spot == 0n) {
       ejectionIndices.push(i);
     }
   }
@@ -272,7 +272,7 @@ export const getOpenAuction = (
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   const progression = folio
     .map((actualBalance, i) => {
-      if (!rebalance.inRebalance[i]) {
+      if (!rebalance.tokens[i].inRebalance) {
         return ZERO;
       }
 
@@ -289,7 +289,7 @@ export const getOpenAuction = (
   // {1} = {USD/wholeShare} / {USD/wholeShare}
   let initialProgression = initialFolio
     .map((initialBalance, i) => {
-      if (!rebalance.inRebalance[i]) {
+      if (!rebalance.tokens[i].inRebalance) {
         return ZERO;
       }
 
@@ -409,7 +409,7 @@ export const getOpenAuction = (
   };
 
   // D27{tok/BU}
-  const newWeights = rebalance.weights.map((weightRange, i) => {
+  const newWeights = rebalance.tokens.map((params: TokenRebalanceParams, i: number) => {
     // {wholeTok/wholeBU} = {USD/wholeShare} * {1} / {wholeBU/wholeShare} / {USD/wholeTok}
     const idealWeight = shareValue.mul(targetBasket[i]).div(actualLimits.spot).div(prices[i]);
 
@@ -426,7 +426,7 @@ export const getOpenAuction = (
       high:
         // hold surpluses aside if ejecting
         round == AuctionRound.EJECT
-          ? weightRange.high
+          ? params.weight.high
           : bn(
               idealWeight
                 .mul(idealHighLimit.div(actualLimits.high)) // add the portion of `delta` we failed to propagate through to the high limit
@@ -444,22 +444,22 @@ export const getOpenAuction = (
     }
 
     // enforce in range
-    if (newWeightsD27.low < weightRange.low) {
-      newWeightsD27.low = weightRange.low;
-    } else if (newWeightsD27.low > weightRange.high) {
-      newWeightsD27.low = weightRange.high;
+    if (newWeightsD27.low < params.weight.low) {
+      newWeightsD27.low = params.weight.low;
+    } else if (newWeightsD27.low > params.weight.high) {
+      newWeightsD27.low = params.weight.high;
     }
 
-    if (newWeightsD27.spot < weightRange.low) {
-      newWeightsD27.spot = weightRange.low;
-    } else if (newWeightsD27.spot > weightRange.high) {
-      newWeightsD27.spot = weightRange.high;
+    if (newWeightsD27.spot < params.weight.low) {
+      newWeightsD27.spot = params.weight.low;
+    } else if (newWeightsD27.spot > params.weight.high) {
+      newWeightsD27.spot = params.weight.high;
     }
 
-    if (newWeightsD27.high < weightRange.low) {
-      newWeightsD27.high = weightRange.low;
-    } else if (newWeightsD27.high > weightRange.high) {
-      newWeightsD27.high = weightRange.high;
+    if (newWeightsD27.high < params.weight.low) {
+      newWeightsD27.high = params.weight.low;
+    } else if (newWeightsD27.high > params.weight.high) {
+      newWeightsD27.high = params.weight.high;
     }
 
     return newWeightsD27;
@@ -474,18 +474,18 @@ export const getOpenAuction = (
   // get new prices, constrained by extremes
 
   // D27{nanoUSD/tok}
-  const newPrices = rebalance.initialPrices.map((initialPrice, i) => {
+  const newPrices = rebalance.tokens.map((params: TokenRebalanceParams, i: number) => {
     // D27{nanoUSD/tok} = {USD/wholeTok} * {nanoUSD/USD} * D27 / {tok/wholeTok}
     const spotPrice = bn(prices[i].mul(D9d).mul(D27d).div(decimalScale[i]));
 
-    if (spotPrice < initialPrice.low || spotPrice > initialPrice.high) {
+    if (spotPrice < params.price.low || spotPrice > params.price.high) {
       throw new Error(
-        `Token ${rebalance.tokens[i]}: spot price ${spotPrice.toString()} out of bounds relative to initial range [${initialPrice.low.toString()}, ${initialPrice.high.toString()}]! auction launcher MUST closeRebalance to prevent loss!`,
+        `Token ${rebalance.tokens[i]}: spot price ${spotPrice.toString()} out of bounds relative to initial range [${params.price.low.toString()}, ${params.price.high.toString()}]! auction launcher MUST closeRebalance to prevent loss!`,
       );
     }
 
     if (rebalance.priceControl == PriceControl.NONE) {
-      return initialPrice;
+      return params.price;
     }
 
     // D27{nanoUSD/tok} = {USD/wholeTok} * {nanoUSD/USD} * D27 / {tok/wholeTok}
@@ -495,19 +495,19 @@ export const getOpenAuction = (
     };
 
     // low
-    if (pricesD27.low < initialPrice.low) {
-      pricesD27.low = initialPrice.low;
+    if (pricesD27.low < params.price.low) {
+      pricesD27.low = params.price.low;
     }
-    if (pricesD27.low > initialPrice.high) {
-      pricesD27.low = initialPrice.high;
+    if (pricesD27.low > params.price.high) {
+      pricesD27.low = params.price.high;
     }
 
     // high
-    if (pricesD27.high < initialPrice.low) {
-      pricesD27.high = initialPrice.low;
+    if (pricesD27.high < params.price.low) {
+      pricesD27.high = params.price.low;
     }
-    if (pricesD27.high > initialPrice.high) {
-      pricesD27.high = initialPrice.high;
+    if (pricesD27.high > params.price.high) {
+      pricesD27.high = params.price.high;
     }
 
     if (pricesD27.low == pricesD27.high && priceError[i].gt(ZERO)) {
@@ -536,12 +536,12 @@ export const getOpenAuction = (
   const deficitTokens: string[] = [];
   const deficitTokenSizes: number[] = []; // {USD}
 
-  rebalance.tokens.forEach((token, i) => {
-    if (!rebalance.inRebalance[i]) {
+  rebalance.tokens.forEach((params: TokenRebalanceParams, i: number) => {
+    if (!rebalance.tokens[i].inRebalance) {
       return;
     }
 
-    auctionTokens.push(token);
+    auctionTokens.push(params.token);
     auctionWeights.push(newWeights[i]);
     auctionPrices.push(newPrices[i]);
 
@@ -557,7 +557,7 @@ export const getOpenAuction = (
       const tokenDeficitValue = deficitAmount.mul(prices[i]);
 
       if (tokenDeficitValue.gt(EPSILON)) {
-        deficitTokens.push(token);
+        deficitTokens.push(params.token);
         deficitTokenSizes.push(tokenDeficitValue.toNumber());
       }
     } else if (_assets[i] > sellDownTo) {
@@ -568,7 +568,7 @@ export const getOpenAuction = (
       const tokenSurplusValue = surplusAmount.mul(prices[i]);
 
       if (tokenSurplusValue.gt(EPSILON)) {
-        surplusTokens.push(token);
+        surplusTokens.push(params.token);
         surplusTokenSizes.push(tokenSurplusValue.toNumber());
       }
     }

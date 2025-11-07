@@ -157,9 +157,7 @@ export async function doAuctions(
 
     // ==============================
 
-    const initialPrices: PriceRange[] = [];
     const assets: bigint[] = [];
-    const inRebalance: boolean[] = [];
     const auctionPrices: number[] = [];
 
     const originalWeights: WeightRange[] = [];
@@ -168,8 +166,9 @@ export async function doAuctions(
     // Populate auction calldata
     {
       // Build arrays in rebalanceState.tokens order, not tokens order
+      // Note: Contract returns old format with tokens as string[], not TokenRebalanceParams[]
       for (let idx = 0; idx < rebalanceState.tokens.length; idx++) {
-        const token = rebalanceState.tokens[idx];
+        const token = rebalanceState.tokens[idx]; // This is a string (token address)
         if (rebalanceTokens.indexOf(token) < 0) {
           throw new Error(`Token ${token} in rebalance state but not in rebalanceTokens`);
         }
@@ -181,15 +180,12 @@ export async function doAuctions(
           throw new Error(`Token ${token} not found in original tokens`);
         }
 
-        initialPrices.push(startRebalanceArgs.prices[startRebalanceIdx]); // Use the original index from startRebalanceArgs
-
         assets.push(currentAssets[idx]);
-        inRebalance.push(rebalanceState.inRebalance[idx]);
         auctionPrices.push(rebalancePricesRec[token.toLowerCase()].snapshotPrice);
-        originalWeights.push(startRebalanceArgs.weights[startRebalanceIdx]); // Use the original index from startRebalanceArgs
+        originalWeights.push(startRebalanceArgs.tokens[startRebalanceIdx].weight); // Use the original index from startRebalanceArgs
 
-        // recover original avgs used to construct startRebalanceArgs.prices
-        const historicalPrice = startRebalanceArgs.prices[startRebalanceIdx];
+        // recover original avgs used to construct startRebalanceArgs.tokens[].price
+        const historicalPrice = startRebalanceArgs.tokens[startRebalanceIdx].price;
         const divisor = 10n ** 36n / 10n ** allDecimalsRec[token]; // 10^(27+9) / 10^decimals
         const lowPriceUSD = Number(historicalPrice.low) / Number(divisor);
         const highPriceUSD = Number(historicalPrice.high) / Number(divisor);
@@ -229,17 +225,25 @@ export async function doAuctions(
       debug,
     );
 
+    // Convert contract's old format to new TokenRebalanceParams[] format
+    const tokensParams = rebalanceState.tokens.map((token: string, idx: number) => ({
+      token: token,
+      weight: rebalanceState.weights[idx],
+      price: rebalanceState.initialPrices[idx],
+      maxAuctionSize: 2n**256n - 1n, // Default max value
+      inRebalance: rebalanceState.inRebalance[idx],
+    }));
+
     const [openAuctionArgsLocal, auctionMetrics] = getOpenAuction(
       {
         nonce: rebalanceState.nonce,
-        tokens: rebalanceState.tokens,
-        weights: rebalanceState.weights,
-        initialPrices: initialPrices,
-        inRebalance: inRebalance,
+        tokens: tokensParams,
         limits: rebalanceState.limits,
-        startedAt: rebalanceState.startedAt,
-        restrictedUntil: rebalanceState.restrictedUntil,
-        availableUntil: rebalanceState.availableUntil,
+        timestamps: {
+          startedAt: rebalanceState.startedAt,
+          restrictedUntil: rebalanceState.restrictedUntil,
+          availableUntil: rebalanceState.availableUntil,
+        },
         priceControl: rebalanceState.priceControl,
       },
       currentSupply,

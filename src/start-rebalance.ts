@@ -3,13 +3,11 @@ import type { Decimal as DecimalType } from "decimal.js-light";
 
 import { bn, D9d, D18d, D27d, D18n, D27n, ONE, ZERO } from "./numbers";
 
-import { PriceRange, RebalanceLimits, WeightRange } from "./types";
+import { PriceRange, RebalanceLimits, TokenRebalanceParams, WeightRange } from "./types";
 
 // Partial set of the args needed to call `startRebalance()`
 export interface StartRebalanceArgsPartial {
-  // tokens: string[]
-  weights: WeightRange[];
-  prices: PriceRange[];
+  tokens: TokenRebalanceParams[];
   limits: RebalanceLimits;
   // auctionLauncherWindow: bigint
   // ttl: bigint
@@ -198,8 +196,13 @@ export const getStartRebalance = (
   }
 
   return {
-    weights: newWeights,
-    prices: newPrices,
+    tokens: tokens.map((token, i) => ({
+      token: token,
+      weight: newWeights[i],
+      price: newPrices[i],
+      maxAuctionSize: 0n, // TODO
+      inRebalance: true,
+    })),
     limits: newLimits,
   };
 };
