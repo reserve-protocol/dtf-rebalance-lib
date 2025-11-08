@@ -26,6 +26,7 @@ export interface StartRebalanceArgsPartial {
  * @param _prices {USD/wholeTok} USD prices for each *whole* token
  * @param _priceError {1} Price error per token to use in the rebalance; should be larger than price error during openAuction
  * @param _dtfPrice {USD/wholeShare} DTF price
+ * @param _maxAuctionSize {USD} The maximum auction size for each token
  * @param weightControl TRACKING=false, NATIVE=true
  * @param deferWeights Whether to use the full range for weights, only possible for NATIVE DTFs
  */
@@ -37,6 +38,7 @@ export const getStartRebalance = (
   _targetBasket: bigint[],
   _prices: number[],
   _priceError: number[],
+  _maxAuctionSizes: number[],
   weightControl: boolean,
   deferWeights: boolean,
   debug?: boolean,
@@ -51,6 +53,7 @@ export const getStartRebalance = (
       _targetBasket,
       _prices,
       _priceError,
+      _maxAuctionSizes,
       weightControl,
       deferWeights,
     );
@@ -86,6 +89,7 @@ export const getStartRebalance = (
 
   const newWeights: WeightRange[] = [];
   const newPrices: PriceRange[] = [];
+  const maxAuctionSizes: bigint[] = [];
 
   const maxPriceError = new Decimal("0.9");
 
@@ -166,6 +170,19 @@ export const getStartRebalance = (
       low: low,
       high: high,
     });
+
+    // === maxAuctionSizes ===
+
+    // {USD}
+    const maxAuctionSize = new Decimal(_maxAuctionSizes[i].toString());
+
+    // {tok} = {USD} * {tok/wholeTok} / {USD/wholeTok}
+    const maxAuctionSizeTok = bn(maxAuctionSize.mul(new Decimal(`1e${decimals[i]}`)).div(prices[i]));
+    if (maxAuctionSizeTok == 0n) {
+      throw new Error(`maxAuctionSize for token ${tokens[i]} is 0`);
+    }
+
+    maxAuctionSizes.push(maxAuctionSizeTok);
   }
 
   // ================================================================
@@ -200,7 +217,7 @@ export const getStartRebalance = (
       token: token,
       weight: newWeights[i],
       price: newPrices[i],
-      maxAuctionSize: 0n, // TODO
+      maxAuctionSize: maxAuctionSizes[i],
       inRebalance: true,
     })),
     limits: newLimits,
