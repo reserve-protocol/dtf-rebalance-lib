@@ -97,6 +97,7 @@ describe("NATIVE DTFs", () => {
         targetBasketS1,
         initialMarketPricesS1,
         priceErrorStartRebalanceS1,
+        tokens.map((_: string) => 1e12), // maxAuctionSizes in USD (1 trillion = effectively unlimited)
         true, // weightControl: true for NATIVE-style
         false, // deferWeights
       );
@@ -188,6 +189,7 @@ describe("NATIVE DTFs", () => {
         targetBasketS1,
         initialMarketPricesS1,
         priceErrorStartRebalanceS1,
+        tokens.map((_: string) => 1e12), // maxAuctionSizes in USD
         true, // weightControl
         true, // deferWeights: true
       );
@@ -511,6 +513,7 @@ describe("NATIVE DTFs", () => {
         targetBasketS2,
         initialMarketPricesS2,
         priceErrorStartRebalanceS2,
+        tokens.map((_: string) => 1e12), // maxAuctionSizes in USD
         true,
         false, // deferWeights
       );
@@ -786,6 +789,7 @@ describe("NATIVE DTFs", () => {
       targetBasket,
       prices,
       priceError,
+      tokens.map((_: string) => 1e12), // maxAuctionSizes in USD
       true, // weightControl: true
       false, // deferWeights
     );
@@ -863,6 +867,7 @@ describe("NATIVE DTFs", () => {
         targetBasket,
         prices,
         priceError,
+        currentTokens.map((_: string) => 1e12), // maxAuctionSizes in USD
         true, // weightControl: true
         false, // deferWeights
       );
@@ -900,6 +905,7 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
     targetBasketUSDCtoDAIUST,
     initialMarketPrices,
     priceErrorStartRebalance,
+    tokens.map((_: string) => 1e12), // maxAuctionSizes in USD
     false, // weightControl: false for TRACKING-style weights and limits
     false, // deferWeights
   );

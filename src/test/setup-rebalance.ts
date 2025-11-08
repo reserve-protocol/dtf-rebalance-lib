@@ -90,15 +90,11 @@ export async function setupRebalance(
     targetBasketArray,
     pricesArray,
     pricesArray.map((_: number) => priceDeviation),
+    pricesArray.map((_: number) => 1e12), // maxAuctionSizes in USD (1 trillion = effectively unlimited)
     weightControl,
     false,
     debug,
   );
-
-  // Set maxAuctionSize for all tokens
-  startRebalanceArgs.tokens.forEach((tokenParam: any) => {
-    tokenParam.maxAuctionSize = 2n**256n - 1n;
-  });
 
   // advance time as-if startRebalance() call was stuck in governance
   const delayDays = governanceDelayDays ?? 5;
@@ -118,10 +114,12 @@ export async function setupRebalance(
   // start rebalance
   await whileImpersonating(hre, await rebalanceManager.getAddress(), async (signer) => {
     // Extract arrays from TokenRebalanceParams for contract call
-    // Contract still uses old signature: (tokens, weights, prices, limits, restrictedUntil, availableUntil)
+    // Contract signature: (tokens, weights, prices, maxAuctionSizes, limits, restrictedUntil, availableUntil)
     const tokenAddresses = startRebalanceArgs.tokens.map((t: any) => t.token);
     const weights = startRebalanceArgs.tokens.map((t: any) => t.weight);
     const prices = startRebalanceArgs.tokens.map((t: any) => t.price);
+    const maxAuctionSizes = startRebalanceArgs.tokens.map((t: any) => t.maxAuctionSize);
+    // TODO update when new Folios are live
 
     await (
       await (folio.connect(signer) as any).startRebalance(
