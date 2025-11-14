@@ -1,7 +1,7 @@
 import { Decimal } from "./utils";
 import type { Decimal as DecimalType } from "decimal.js-light";
 
-import { bn, D9d, D18d, D27d, D18n, D27n, ONE, ZERO } from "./numbers";
+import { bn, D9d, D18d, D27d, D18n, D256_MAXn, D27n, ONE, ZERO } from "./numbers";
 
 import { PriceRange, RebalanceLimits, TokenRebalanceParams, WeightRange } from "./types";
 
@@ -177,9 +177,12 @@ export const getStartRebalance = (
     const maxAuctionSize = new Decimal(_maxAuctionSizes[i].toString());
 
     // {tok} = {USD} * {tok/wholeTok} / {USD/wholeTok}
-    const maxAuctionSizeTok = bn(maxAuctionSize.mul(new Decimal(`1e${decimals[i]}`)).div(prices[i]));
+    let maxAuctionSizeTok = bn(maxAuctionSize.mul(new Decimal(`1e${decimals[i]}`)).div(prices[i]));
     if (maxAuctionSizeTok == 0n) {
       throw new Error(`maxAuctionSize for token ${tokens[i]} is 0`);
+    }
+    if (maxAuctionSizeTok > D256_MAXn) {
+      maxAuctionSizeTok = D256_MAXn;
     }
 
     maxAuctionSizes.push(maxAuctionSizeTok);

@@ -199,6 +199,11 @@ export const getOpenAuction = (
     };
   });
 
+  // {wholeTok} = {tok} / {tok/wholeTok}
+  const maxAuctionSizes = rebalance.tokens.map((params: TokenRebalanceParams, i: number) =>
+    new Decimal(params.maxAuctionSize.toString()).div(decimalScale[i]),
+  );
+
   const finalStageAt = new Decimal(_finalStageAt.toString());
 
   // ================================================================
@@ -551,7 +556,11 @@ export const getOpenAuction = (
 
     if (_assets[i] < buyUpTo) {
       // {wholeTok} = {tok} / {tok/wholeTok}
-      const deficitAmount = new Decimal((buyUpTo - _assets[i]).toString()).div(decimalScale[i]);
+      let deficitAmount = new Decimal((buyUpTo - _assets[i]).toString()).div(decimalScale[i]);
+
+      if (deficitAmount.gt(maxAuctionSizes[i])) {
+        deficitAmount = maxAuctionSizes[i];
+      }
 
       // {USD} = {wholeTok} * {USD/wholeTok}
       const tokenDeficitValue = deficitAmount.mul(prices[i]);
@@ -562,7 +571,11 @@ export const getOpenAuction = (
       }
     } else if (_assets[i] > sellDownTo) {
       // {wholeTok} = {tok} / {tok/wholeTok}
-      const surplusAmount = new Decimal((_assets[i] - sellDownTo).toString()).div(decimalScale[i]);
+      let surplusAmount = new Decimal((_assets[i] - sellDownTo).toString()).div(decimalScale[i]);
+
+      if (surplusAmount.gt(maxAuctionSizes[i])) {
+        surplusAmount = maxAuctionSizes[i];
+      }
 
       // {USD} = {wholeTok} * {USD/wholeTok}
       const tokenSurplusValue = surplusAmount.mul(prices[i]);

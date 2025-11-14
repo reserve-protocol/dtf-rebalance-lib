@@ -6,7 +6,7 @@ import { Contract } from "ethers";
 
 import { whileImpersonating, toPlainObject, createPriceLookup, logPercentages } from "./utils";
 import { AuctionMetrics, AuctionRound, OpenAuctionArgs, getOpenAuction, getTargetBasket } from "../open-auction";
-import { PriceRange, WeightRange } from "../types";
+import { WeightRange } from "../types";
 import { RebalanceContracts, RebalanceSigners, RebalanceInitialState } from "./setup-rebalance";
 import { bn } from "../numbers";
 
@@ -230,7 +230,7 @@ export async function doAuctions(
       token: token,
       weight: rebalanceState.weights[idx],
       price: rebalanceState.initialPrices[idx],
-      maxAuctionSize: 2n**256n - 1n, // Default max value
+      maxAuctionSize: rebalanceState.maxAuctionSizes[idx],
       inRebalance: rebalanceState.inRebalance[idx],
     }));
 
