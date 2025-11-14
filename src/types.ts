@@ -21,17 +21,26 @@ export interface PriceRange {
   high: bigint; // D27{nanoUSD/tok}
 }
 
-export interface Rebalance {
-  nonce: bigint;
-  tokens: string[];
-  weights: WeightRange[];
-  initialPrices: PriceRange[];
-  inRebalance: boolean[];
-  limits: RebalanceLimits;
+export interface TokenRebalanceParams {
+  token: string;
+  weight: WeightRange;
+  price: PriceRange;
+  maxAuctionSize: bigint;
+  inRebalance: boolean;
+}
+
+export interface RebalanceTimestamps {
   startedAt: bigint;
   restrictedUntil: bigint;
   availableUntil: bigint;
+}
+
+export interface Rebalance {
+  nonce: bigint;
   priceControl: PriceControl;
+  tokens: TokenRebalanceParams[];
+  limits: RebalanceLimits;
+  timestamps: RebalanceTimestamps;
 }
 
 export interface Folio {

@@ -6,11 +6,13 @@ export const ZERO_BYTES = "0x000000000000000000000000000000000000000000000000000
 export const CHAIN_RPC_URLS: Record<number, string | undefined> = {
   1: process.env.MAINNET_RPC_URL,
   8453: process.env.BASE_RPC_URL,
+  56: process.env.BSC_RPC_URL,
 };
 
 export const CHAIN_BLOCK_NUMBERS: Record<number, number | undefined> = {
   1: 23078902,
   8453: 33430815,
+  56: 68198556,
 };
 
 export const FOLIO_CONFIGS: Folio[] = [
@@ -125,5 +127,12 @@ export const FOLIO_CONFIGS: Folio[] = [
     folio: "0x4da9a0f397db1397902070f93a4d6ddbc0e0e6e8",
     proxyAdmin: "0xf6Db82f6b5F343d74A1D88af9e58fA1d2D89562e",
     basketGovernor: "0xf9edb4491fbd5e1185e05ecba2d69251dd869096",
+  },
+  {
+    name: "CMC20",
+    chainId: 56,
+    folio: "0x2f8a339b5889ffac4c5a956787cda593b3c36867",
+    proxyAdmin: "0x91a42b577189A52F211E830b73dc5479D611579A",
+    basketGovernor: "0x12940889e849012c633f47ba8925bbee4ee96d45",
   },
 ];

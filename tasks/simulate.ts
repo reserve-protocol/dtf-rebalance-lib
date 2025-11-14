@@ -74,7 +74,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       throw new Error(`Failed to get folio version: ${error}. The folio contract may not be properly initialized.`);
     }
 
-    if (folioVersion !== "4.0.0") {
+    if (folioVersion[0] !== "4") {
       throw new Error(`Unsupported folio version: ${folioVersion}. This simulation requires version 4.0.0.`);
     }
 
