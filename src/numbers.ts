@@ -7,6 +7,7 @@ const Decimal = DecimalLight.clone({ precision: 100 });
 export const D27n: bigint = 10n ** 27n;
 export const D18n: bigint = 10n ** 18n;
 export const D9n: bigint = 10n ** 9n;
+export const D256_MAXn: bigint = 10n ** 256n - 1n;
 
 export const D27d: DecimalType = new Decimal("1e27");
 export const D18d: DecimalType = new Decimal("1e18");

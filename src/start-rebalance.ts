@@ -1,15 +1,13 @@
 import { Decimal } from "./utils";
 import type { Decimal as DecimalType } from "decimal.js-light";
 
-import { bn, D9d, D18d, D27d, D18n, D27n, ONE, ZERO } from "./numbers";
+import { bn, D9d, D18d, D27d, D18n, D256_MAXn, D27n, ONE, ZERO } from "./numbers";
 
-import { PriceRange, RebalanceLimits, WeightRange } from "./types";
+import { PriceRange, RebalanceLimits, TokenRebalanceParams, WeightRange } from "./types";
 
 // Partial set of the args needed to call `startRebalance()`
 export interface StartRebalanceArgsPartial {
-  // tokens: string[]
-  weights: WeightRange[];
-  prices: PriceRange[];
+  tokens: TokenRebalanceParams[];
   limits: RebalanceLimits;
   // auctionLauncherWindow: bigint
   // ttl: bigint
@@ -28,6 +26,7 @@ export interface StartRebalanceArgsPartial {
  * @param _prices {USD/wholeTok} USD prices for each *whole* token
  * @param _priceError {1} Price error per token to use in the rebalance; should be larger than price error during openAuction
  * @param _dtfPrice {USD/wholeShare} DTF price
+ * @param _maxAuctionSize {USD} The maximum auction size for each token
  * @param weightControl TRACKING=false, NATIVE=true
  * @param deferWeights Whether to use the full range for weights, only possible for NATIVE DTFs
  */
@@ -39,6 +38,7 @@ export const getStartRebalance = (
   _targetBasket: bigint[],
   _prices: number[],
   _priceError: number[],
+  _maxAuctionSizes: number[],
   weightControl: boolean,
   deferWeights: boolean,
   debug?: boolean,
@@ -53,6 +53,7 @@ export const getStartRebalance = (
       _targetBasket,
       _prices,
       _priceError,
+      _maxAuctionSizes,
       weightControl,
       deferWeights,
     );
@@ -88,6 +89,7 @@ export const getStartRebalance = (
 
   const newWeights: WeightRange[] = [];
   const newPrices: PriceRange[] = [];
+  const maxAuctionSizes: bigint[] = [];
 
   const maxPriceError = new Decimal("0.9");
 
@@ -168,6 +170,22 @@ export const getStartRebalance = (
       low: low,
       high: high,
     });
+
+    // === maxAuctionSizes ===
+
+    // {USD}
+    const maxAuctionSize = new Decimal(_maxAuctionSizes[i].toString());
+
+    // {tok} = {USD} * {tok/wholeTok} / {USD/wholeTok}
+    let maxAuctionSizeTok = bn(maxAuctionSize.mul(new Decimal(`1e${decimals[i]}`)).div(prices[i]));
+    if (maxAuctionSizeTok == 0n) {
+      throw new Error(`maxAuctionSize for token ${tokens[i]} is 0`);
+    }
+    if (maxAuctionSizeTok > D256_MAXn) {
+      maxAuctionSizeTok = D256_MAXn;
+    }
+
+    maxAuctionSizes.push(maxAuctionSizeTok);
   }
 
   // ================================================================
@@ -198,8 +216,13 @@ export const getStartRebalance = (
   }
 
   return {
-    weights: newWeights,
-    prices: newPrices,
+    tokens: tokens.map((token, i) => ({
+      token: token,
+      weight: newWeights[i],
+      price: newPrices[i],
+      maxAuctionSize: maxAuctionSizes[i],
+      inRebalance: true,
+    })),
     limits: newLimits,
   };
 };

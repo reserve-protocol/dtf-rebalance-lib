@@ -24,8 +24,7 @@ export interface RebalanceInitialState {
   initialAssets: bigint[];
   initialSupply: bigint;
   startRebalanceArgs: {
-    weights: any[];
-    prices: any[];
+    tokens: any[];
     limits: any;
   };
 }
@@ -91,6 +90,7 @@ export async function setupRebalance(
     targetBasketArray,
     pricesArray,
     pricesArray.map((_: number) => priceDeviation),
+    pricesArray.map((_: number) => 1e12), // maxAuctionSizes in USD (1 trillion = effectively unlimited)
     weightControl,
     false,
     debug,
@@ -113,11 +113,19 @@ export async function setupRebalance(
 
   // start rebalance
   await whileImpersonating(hre, await rebalanceManager.getAddress(), async (signer) => {
+    // Extract arrays from TokenRebalanceParams for contract call
+    // Contract signature: (tokens, weights, prices, maxAuctionSizes, limits, restrictedUntil, availableUntil)
+    const tokenAddresses = startRebalanceArgs.tokens.map((t: any) => t.token);
+    const weights = startRebalanceArgs.tokens.map((t: any) => t.weight);
+    const prices = startRebalanceArgs.tokens.map((t: any) => t.price);
+    const maxAuctionSizes = startRebalanceArgs.tokens.map((t: any) => t.maxAuctionSize);
+    // TODO update when new Folios are live
+
     await (
       await (folio.connect(signer) as any).startRebalance(
-        tokens,
-        startRebalanceArgs.weights,
-        startRebalanceArgs.prices,
+        tokenAddresses,
+        weights,
+        prices,
         startRebalanceArgs.limits,
         0n,
         1000000n,
