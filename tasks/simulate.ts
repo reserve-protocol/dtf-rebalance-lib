@@ -111,15 +111,35 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
 
     // Get all ProposalCreated events (proposalId is not indexed, so we can't filter by it)
     const filter = governor.filters.ProposalCreated();
-    const events = await governor.queryFilter(filter);
 
-    // Find the event for our specific proposal ID
-    const event = events.find((e) => {
-      if ("args" in e && e.args) {
-        return e.args.proposalId?.toString() === id.toString();
+    let event;
+    try {
+      // only mainnet and base can query for all blocks
+      const events = await governor.queryFilter(filter);
+
+      // Find the event for our specific proposal ID
+      event = events.find((e) => {
+        if ("args" in e && e.args) {
+          return e.args.proposalId?.toString() === id.toString();
+        }
+        return false;
+      });
+    } catch {
+      // on bsc we have to look in batches of 999 each
+
+      // look back 10 batches of 999 blocks each
+      for (let i = 0; i < 100 && !event; i++) {
+        const events = await governor.queryFilter(filter, blockNumber! - 999 * (i + 1), blockNumber! - 999 * i);
+
+        // Find the event for our specific proposal ID
+        event = events.find((e) => {
+          if ("args" in e && e.args) {
+            return e.args.proposalId?.toString() === id.toString();
+          }
+          return false;
+        });
       }
-      return false;
-    });
+    }
 
     if (!event) {
       throw new Error(
