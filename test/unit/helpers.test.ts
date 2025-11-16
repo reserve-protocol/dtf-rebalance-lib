@@ -199,9 +199,9 @@ describe("NATIVE DTFs", () => {
       // Verify that deferWeights set the weights and limits correctly
       assert.equal(weightsDeferred[0].low, 0n); // USDC target is 0, so low stays 0
       assert.equal(weightsDeferred[0].high, 0n); // USDC target is 0, so high stays 0
-      assert.equal(weightsDeferred[1].low, 1n); // DAI low should be 1
+      assert.equal(weightsDeferred[1].low, 0n); // DAI low should be 0 (deferWeights sets low to 0)
       assert.equal(weightsDeferred[1].high, bn("1e54")); // DAI high should be 1e54 (D27n * D27n)
-      assert.equal(weightsDeferred[2].low, 1n); // USDT low should be 1
+      assert.equal(weightsDeferred[2].low, 0n); // USDT low should be 0 (deferWeights sets low to 0)
       assert.equal(weightsDeferred[2].high, bn("1e54")); // USDT high should be 1e54
 
       // Verify limits are set correctly (with weightControl=true, limits are fixed at 1e18)
@@ -231,7 +231,7 @@ describe("NATIVE DTFs", () => {
       );
 
       // The getOpenAuction function will calculate ideal weights and then clamp them
-      // With deferWeights, the weight ranges are extremely wide
+      // With deferWeights, the weight ranges are extremely wide (low=0, high=1e54)
       // During EJECT, high weights are kept at their original values
       assertOpenAuctionArgsEqual(openAuctionArgs, {
         rebalanceNonce: 1n,

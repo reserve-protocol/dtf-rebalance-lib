@@ -126,7 +126,7 @@ export const getStartRebalance = (
 
       // D27{tok/share} = {wholeTok/wholeShare} * D27{tok/share}{wholeShare/wholeTok} / {BU/share}
       newWeights.push({
-        low: deferWeights ? 1n : bn(lowWeight.mul(limitMultiplier)),
+        low: deferWeights ? 0n : bn(lowWeight.mul(limitMultiplier)),
         spot: bn(spotWeight.mul(limitMultiplier)),
         high: deferWeights ? D27n * D27n : bn(highWeight.mul(limitMultiplier)),
       });
