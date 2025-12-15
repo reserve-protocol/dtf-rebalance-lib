@@ -16,8 +16,8 @@
     "build": "npm run clean && tsc --project tsconfig.build.json",
     "prepublishOnly": "npm run build",
     "test": "npm run test:unit && npm run test:e2e",
-    "test:unit": "node --test --require ts-node/register test/unit/*.test.ts",
-    "test:e2e": "hardhat test test/e2e/*.test.ts --bail"
+    "test:unit": "node --test --require ts-node/register test/**/unit.test.ts",
+    "test:e2e": "hardhat test test/*.test.ts --bail"
   },
   "publishConfig": {
     "access": "public"

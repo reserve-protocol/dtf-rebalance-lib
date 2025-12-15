@@ -1,8 +1,9 @@
 import "@nomicfoundation/hardhat-ethers";
+import { Contract } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import { Contract } from "ethers";
-import { bn } from "../numbers";
+
+import { bn } from "../src/numbers";
 
 export function toPlainObject(obj: any): any {
   if (typeof obj !== "object" || obj === null) {

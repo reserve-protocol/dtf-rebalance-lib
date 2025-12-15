@@ -1,8 +1,12 @@
 import { task } from "hardhat/config";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { FOLIO_CONFIGS } from "../src/test/config";
-import { initializeChainState, setupContractsAndSigners } from "../src/test/setup";
-import { doAuctions } from "../src/test/do-auctions";
+import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
+
+import { FolioVersion } from "../src/types";
+import { getTargetBasket } from "../src/open-auction";
+
+import { initializeChainState, setupContractsAndSigners } from "../test/setup";
+import { doAuctions } from "../test/do-auctions";
 import {
   calculateRebalanceMetrics,
   logPercentages,
@@ -10,8 +14,9 @@ import {
   simulateMarketPrices,
   createPriceLookup,
   whileImpersonating,
-} from "../src/test/utils";
-import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
+} from "../test/utils";
+
+import { FOLIO_CONFIGS } from "../test/4.0.0/config";
 
 import FolioGovernorArtifact from "../out/FolioGovernor.sol/FolioGovernor.json";
 
@@ -662,6 +667,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     }
 
     const startRebalanceArgs = {
+      tokens: allTokens,
       weights: reorderedWeights,
       prices: reorderedPrices,
       limits: {
@@ -707,8 +713,6 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       allTokenDecimals.push(await tokenContract.decimals());
     }
 
-    const { getTargetBasket } = await import("../src/open-auction");
-
     // Always use baseline prices for calculating the target basket
     // The target represents what we want to achieve, independent of market volatility
     const targetCalculationPrices = allTokens.map((token) => baselinePriceLookup.getPrice(token));
@@ -743,6 +747,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     const pricesForDoAuctions = baselinePriceRec;
 
     const { totalRebalancedValue } = await doAuctions(
+      FolioVersion.V4,
       hre,
       { folio, folioLensTyped },
       { bidder, rebalanceManager, auctionLauncher, admin },

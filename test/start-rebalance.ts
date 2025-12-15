@@ -1,35 +1,17 @@
 import "@nomicfoundation/hardhat-ethers";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
-import { Contract } from "ethers";
 
 import { whileImpersonating } from "./utils";
-import { getStartRebalance } from "../start-rebalance";
+import { getStartRebalance } from "../src/start-rebalance";
+import { FolioVersion } from "../src/types";
+import { RebalanceContracts, RebalanceSigners, RebalanceInitialState } from "./types";
 
-export interface RebalanceContracts {
-  folio: Contract;
-  folioLensTyped: Contract;
-}
+import { StartRebalanceArgsPartial as StartRebalanceArgsPartial_4_0_0 } from "../src/4.0.0/types";
+import { StartRebalanceArgsPartial as StartRebalanceArgsPartial_5_0_0 } from "../src/types";
 
-export interface RebalanceSigners {
-  admin: HardhatEthersSigner;
-  bidder: HardhatEthersSigner;
-  rebalanceManager: HardhatEthersSigner;
-  auctionLauncher: HardhatEthersSigner;
-}
-
-export interface RebalanceInitialState {
-  initialTokens: string[];
-  initialAssets: bigint[];
-  initialSupply: bigint;
-  startRebalanceArgs: {
-    tokens: any[];
-    limits: any;
-  };
-}
-
-export async function setupRebalance(
+export async function startRebalance(
+  version: FolioVersion,
   hre: HardhatRuntimeEnvironment,
   contracts: RebalanceContracts,
   signers: RebalanceSigners,
@@ -82,7 +64,8 @@ export async function setupRebalance(
   const decimalsArray = tokens.map((token: string) => allDecimalsRec[token]);
   const targetBasketArray = tokens.map((token: string) => targetBasketRec[token]);
 
-  const startRebalanceArgs = getStartRebalance(
+  const startRebalanceArgs: StartRebalanceArgsPartial_4_0_0 | StartRebalanceArgsPartial_5_0_0 = getStartRebalance(
+    version,
     initialSupply,
     tokens,
     initialAssets,
@@ -113,24 +96,33 @@ export async function setupRebalance(
 
   // start rebalance
   await whileImpersonating(hre, await rebalanceManager.getAddress(), async (signer) => {
-    // Extract arrays from TokenRebalanceParams for contract call
-    // Contract signature: (tokens, weights, prices, maxAuctionSizes, limits, restrictedUntil, availableUntil)
-    const tokenAddresses = startRebalanceArgs.tokens.map((t: any) => t.token);
-    const weights = startRebalanceArgs.tokens.map((t: any) => t.weight);
-    const prices = startRebalanceArgs.tokens.map((t: any) => t.price);
-    const maxAuctionSizes = startRebalanceArgs.tokens.map((t: any) => t.maxAuctionSize);
-    // TODO update when new Folios are live
+    if (version === FolioVersion.V4) {
+      await (
+        await (folio.connect(signer) as any).startRebalance(
+          (startRebalanceArgs as StartRebalanceArgsPartial_4_0_0).tokens,
+          (startRebalanceArgs as StartRebalanceArgsPartial_4_0_0).weights,
+          (startRebalanceArgs as StartRebalanceArgsPartial_4_0_0).prices,
+          (startRebalanceArgs as StartRebalanceArgsPartial_4_0_0).limits,
+          0n,
+          1000000n,
+        )
+      ).wait();
+    } else if (version === FolioVersion.V5) {
+      // TODO update when v5 Folio are live
 
-    await (
-      await (folio.connect(signer) as any).startRebalance(
-        tokenAddresses,
-        weights,
-        prices,
-        startRebalanceArgs.limits,
-        0n,
-        1000000n,
-      )
-    ).wait();
+      await (
+        await (folio.connect(signer) as any).startRebalance(
+          (startRebalanceArgs as StartRebalanceArgsPartial_5_0_0).tokens.map((t: any) => t.token),
+          (startRebalanceArgs as StartRebalanceArgsPartial_5_0_0).tokens.map((t: any) => t.weight),
+          (startRebalanceArgs as StartRebalanceArgsPartial_5_0_0).tokens.map((t: any) => t.price),
+          (startRebalanceArgs as StartRebalanceArgsPartial_5_0_0).limits,
+          0n,
+          1000000n,
+        )
+      ).wait();
+    } else {
+      throw new Error(`Unsupported version: ${version}`);
+    }
   });
 
   return {

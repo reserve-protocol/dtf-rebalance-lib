@@ -4,13 +4,14 @@ import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import { Contract } from "ethers";
 
+import { bn } from "../src/numbers";
 import { whileImpersonating, toPlainObject, createPriceLookup, logPercentages } from "./utils";
-import { AuctionMetrics, AuctionRound, OpenAuctionArgs, getOpenAuction, getTargetBasket } from "../open-auction";
-import { WeightRange } from "../types";
-import { RebalanceContracts, RebalanceSigners, RebalanceInitialState } from "./setup-rebalance";
-import { bn } from "../numbers";
+import { AuctionMetrics, AuctionRound, FolioVersion, OpenAuctionArgs, WeightRange } from "../src/types";
+import { getOpenAuction, getTargetBasket } from "../src/open-auction";
+import { RebalanceContracts, RebalanceSigners, RebalanceInitialState } from "./types";
 
 export async function doAuctions(
+  version: FolioVersion,
   hre: HardhatRuntimeEnvironment,
   contracts: RebalanceContracts,
   signers: RebalanceSigners,
@@ -235,6 +236,7 @@ export async function doAuctions(
     }));
 
     const [openAuctionArgsLocal, auctionMetrics] = getOpenAuction(
+      version,
       {
         nonce: rebalanceState.nonce,
         tokens: tokensParams,

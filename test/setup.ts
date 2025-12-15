@@ -2,20 +2,29 @@ import "@nomicfoundation/hardhat-ethers";
 import { reset } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import { Folio } from "../types";
-import { ZERO_BYTES, CHAIN_RPC_URLS } from "./config";
+import { FolioConfig } from "./types";
 import { whileImpersonating } from "./utils";
 
-import FolioArtifact from "../../out/Folio.sol/Folio.json";
-import FolioLensArtifact from "../../out/FolioLens.sol/FolioLens.json";
-import MathLibArtifact from "../../out/MathLib.sol/MathLib.json";
-import RebalancingLibArtifact from "../../out/RebalancingLib.sol/RebalancingLib.json";
-import ProxyAdminArtifact from "../../out/ProxyAdmin.sol/ProxyAdmin.json";
+import FolioArtifact from "../out/Folio.sol/Folio.json";
+import FolioLensArtifact from "../out/FolioLens.sol/FolioLens.json";
+import MathLibArtifact from "../out/MathLib.sol/MathLib.json";
+import RebalancingLibArtifact from "../out/RebalancingLib.sol/RebalancingLib.json";
+import ProxyAdminArtifact from "../out/ProxyAdmin.sol/ProxyAdmin.json";
 import * as dotenv from "dotenv";
 
 dotenv.config();
 
-export async function initializeChainState(hre: HardhatRuntimeEnvironment, folioConfig: Folio, blockNumber?: number) {
+const CHAIN_RPC_URLS: Record<number, string | undefined> = {
+  1: process.env.MAINNET_RPC_URL,
+  8453: process.env.BASE_RPC_URL,
+  56: process.env.BSC_RPC_URL,
+};
+
+export async function initializeChainState(
+  hre: HardhatRuntimeEnvironment,
+  folioConfig: FolioConfig,
+  blockNumber?: number,
+) {
   const rpcUrl = CHAIN_RPC_URLS[folioConfig.chainId];
 
   if (!rpcUrl) {
@@ -27,7 +36,7 @@ export async function initializeChainState(hre: HardhatRuntimeEnvironment, folio
   await hre.ethers.provider.send("evm_mine", []); // Mine a new block to ensure RPC works
 }
 
-export async function setupContractsAndSigners(hre: HardhatRuntimeEnvironment, folioConfig: Folio) {
+export async function setupContractsAndSigners(hre: HardhatRuntimeEnvironment, folioConfig: FolioConfig) {
   let bidder: HardhatEthersSigner;
   let admin: HardhatEthersSigner;
   let rebalanceManager: HardhatEthersSigner;
@@ -37,7 +46,9 @@ export async function setupContractsAndSigners(hre: HardhatRuntimeEnvironment, f
 
   const folio = await hre.ethers.getContractAt(FolioArtifact.abi, folioConfig.folio);
 
-  admin = await hre.ethers.getSigner(await folio.getRoleMember(ZERO_BYTES, 0));
+  admin = await hre.ethers.getSigner(
+    await folio.getRoleMember("0x0000000000000000000000000000000000000000000000000000000000000000", 0),
+  );
 
   rebalanceManager = await hre.ethers.getSigner(
     await folio.getRoleMember("0x4ff6ae4d6a29e79ca45c6441bdc89b93878ac6118485b33c8baa3749fc3cb130", 0), // REBALANCE_MANAGER
@@ -57,7 +68,7 @@ export async function setupContractsAndSigners(hre: HardhatRuntimeEnvironment, f
   return { folio, folioLensTyped, bidder, admin, rebalanceManager, auctionLauncher };
 }
 
-export async function deployCommonContracts(hre: HardhatRuntimeEnvironment, folioConfig: Folio) {
+export async function deployCommonContracts(hre: HardhatRuntimeEnvironment, folioConfig: FolioConfig) {
   let bidder: HardhatEthersSigner;
   let admin: HardhatEthersSigner;
   let rebalanceManager: HardhatEthersSigner;

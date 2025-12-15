@@ -1,11 +1,16 @@
 import { loadFixture, time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import hre from "hardhat";
-import { FOLIO_CONFIGS, CHAIN_BLOCK_NUMBERS } from "../../src/test/config";
-import { initializeChainState, setupContractsAndSigners } from "../../src/test/setup";
-import { setupRebalance } from "../../src/test/setup-rebalance";
-import { doAuctions } from "../../src/test/do-auctions";
-import { getAssetPrices, getTokenNameAndSymbol } from "../../src/test/utils";
-import { bn } from "../../src/numbers";
+
+import { bn } from "../src/numbers";
+import { FolioVersion } from "../src/types";
+
+import { initializeChainState, setupContractsAndSigners } from "./setup";
+import { startRebalance } from "./start-rebalance";
+import { doAuctions } from "./do-auctions";
+import { getAssetPrices, getTokenNameAndSymbol } from "./utils";
+
+import { FOLIO_CONFIGS, CHAIN_BLOCK_NUMBERS } from "./4.0.0/config";
+// TODO test V5
 
 // Only test BGCI for now
 const TEST_FOLIO_CONFIGS = FOLIO_CONFIGS.filter((f) => f.name === "BGCI");
@@ -93,7 +98,8 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
       }
 
       // Setup the rebalance
-      const initialState = await setupRebalance(
+      const initialState = await startRebalance(
+        FolioVersion.V4,
         hre,
         { folio, folioLensTyped },
         { bidder, rebalanceManager, auctionLauncher, admin },
@@ -106,6 +112,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
 
       // Execute the auctions
       await doAuctions(
+        FolioVersion.V4,
         hre,
         { folio, folioLensTyped },
         { bidder, rebalanceManager, auctionLauncher, admin },
