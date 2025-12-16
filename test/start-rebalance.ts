@@ -108,6 +108,8 @@ export async function startRebalance(
         )
       ).wait();
     } else if (version === FolioVersion.V5) {
+      throw new Error(`only version 4.0.0 implemented for now: ${version}`);
+
       // TODO update when v5 Folio are live
 
       await (

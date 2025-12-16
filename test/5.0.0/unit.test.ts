@@ -3,12 +3,20 @@ import { strict as assert } from "node:assert";
 
 import { bn } from "../../src/numbers";
 
-import { OpenAuctionArgs, PriceControl, PriceRange, RebalanceLimits, Rebalance, WeightRange } from "../../src/types";
+import {
+  FolioVersion,
+  OpenAuctionArgs,
+  PriceControl,
+  PriceRange,
+  RebalanceLimits,
+  Rebalance,
+  WeightRange,
+} from "../../src/types";
 
 import { getBasketDistribution } from "../../src/utils";
 
-import { getOpenAuction } from "../../src/5.0.0/open-auction";
-import { getStartRebalance } from "../../src/5.0.0/start-rebalance";
+import { getOpenAuction } from "../../src/open-auction";
+import { getStartRebalance } from "../../src/start-rebalance";
 
 const PRECISION = bn("1e3"); // 1-part-in-1000
 
@@ -94,6 +102,7 @@ describe("NATIVE DTFs", () => {
 
     beforeEach(() => {
       const { tokens: tokensParams, limits } = getStartRebalance(
+        FolioVersion.V5,
         supply,
         tokens,
         initialFolioS1,
@@ -183,6 +192,7 @@ describe("NATIVE DTFs", () => {
     it("Step 1b: Ejection Phase with deferWeights (initial folio, priceControl=true, prices=[1,1,1])", () => {
       // Setup with deferWeights: true
       const { tokens: tokensDeferred, limits: limitsDeferred } = getStartRebalance(
+        FolioVersion.V5,
         supply,
         tokens,
         initialFolioS1,
@@ -507,6 +517,7 @@ describe("NATIVE DTFs", () => {
 
     beforeEach(() => {
       const { tokens: tokensParams, limits } = getStartRebalance(
+        FolioVersion.V5,
         supply,
         tokens,
         initialFolioS2,
@@ -779,6 +790,7 @@ describe("NATIVE DTFs", () => {
     const targetBasket = [bn("0.75e18"), bn("0.25e18")];
     const initialFolio = [bn("1e6"), bn("0")]; // Represents 1 USDC, 0 ETH
     const { tokens: tokensResult, limits: newLimitsResult } = getStartRebalance(
+      FolioVersion.V5,
       supply,
       tokens,
       initialFolio,
@@ -854,6 +866,7 @@ describe("NATIVE DTFs", () => {
       const targetBasket = getBasketDistribution(bals, prices, currentDecimals);
 
       const { tokens: tokensResult, limits: newLimitsResult } = getStartRebalance(
+        FolioVersion.V5,
         supply,
         currentTokens,
         folio,
@@ -889,6 +902,7 @@ describe("TRACKING DTF Rebalance: USDC -> DAI/USDT Sequence", () => {
   const _folioUSDCStart = [bn("1e6"), bn("0"), bn("0")]; // 100% USDC, use as initialFolio for this sequence
 
   const { tokens: tokensTracking, limits: initialLimitsTracking } = getStartRebalance(
+    FolioVersion.V5,
     supply,
     tokens,
     _folioUSDCStart,

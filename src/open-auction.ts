@@ -1,9 +1,10 @@
 import { Decimal } from "./utils";
 
 import { bn, D9d, D18d } from "./numbers";
-import { AuctionMetrics, FolioVersion, OpenAuctionArgs, Rebalance, TokenRebalanceParams, WeightRange } from "./types";
+import { AuctionMetrics, FolioVersion, OpenAuctionArgs, WeightRange } from "./types";
 
 import { Rebalance as Rebalance_4_0_0 } from "./4.0.0/types";
+import { Rebalance as Rebalance_5_0_0 } from "./types";
 
 import { getOpenAuction as getOpenAuction_4_0_0 } from "./4.0.0/open-auction";
 import { getOpenAuction as getOpenAuction_5_0_0 } from "./5.0.0/open-auction";
@@ -60,6 +61,7 @@ export const getTargetBasket = (
  *
  * Non-AUCTION_LAUNCHERs should use `folio.openAuctionUnrestricted()`
  *
+ * @param version The version of the Folio, MUST match `_rebalance` type
  * @param _rebalance The result of calling folio.getRebalance(), today
  * @param _supply {share} The totalSupply() of the basket, today
  * @param _initialSupply {share} The totalSupply() at time rebalance was first proposed
@@ -76,7 +78,7 @@ export const getTargetBasket = (
  */
 export const getOpenAuction = (
   version: FolioVersion,
-  _rebalance: Rebalance,
+  _rebalance: Rebalance_5_0_0 | Rebalance_4_0_0,
   _supply: bigint,
   _initialSupply: bigint,
   _initialAssets: bigint[] = [],
@@ -95,21 +97,8 @@ export const getOpenAuction = (
   if (version === FolioVersion.V4) {
     // Folio 4.0.0
 
-    const rebalance_4_0_0: Rebalance_4_0_0 = {
-      nonce: _rebalance.nonce,
-      tokens: _rebalance.tokens.map((token: TokenRebalanceParams) => token.token),
-      weights: _rebalance.tokens.map((token: TokenRebalanceParams) => token.weight),
-      initialPrices: _rebalance.tokens.map((token: TokenRebalanceParams) => token.price),
-      inRebalance: _rebalance.tokens.map((token: TokenRebalanceParams) => token.inRebalance),
-      limits: _rebalance.limits,
-      startedAt: _rebalance.timestamps.startedAt,
-      restrictedUntil: _rebalance.timestamps.restrictedUntil,
-      availableUntil: _rebalance.timestamps.availableUntil,
-      priceControl: _rebalance.priceControl,
-    };
-
     return getOpenAuction_4_0_0(
-      rebalance_4_0_0,
+      _rebalance as Rebalance_4_0_0,
       _supply,
       _initialSupply,
       _initialAssets,
@@ -125,7 +114,7 @@ export const getOpenAuction = (
     // Folio 5.0.0
 
     return getOpenAuction_5_0_0(
-      _rebalance,
+      _rebalance as Rebalance_5_0_0,
       _supply,
       _initialSupply,
       _initialAssets,
