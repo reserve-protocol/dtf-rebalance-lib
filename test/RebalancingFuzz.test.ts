@@ -5,7 +5,7 @@ import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
 import { FolioVersion } from "../src/types";
 
-import { getAssetPrices, logPercentages } from "./utils";
+import { getAssetPrices, logPercentages, normalizePrices } from "./utils";
 import { initializeChainState, setupContractsAndSigners } from "./setup";
 import { startRebalance } from "./start-rebalance";
 import { doAuctions } from "./do-auctions";
@@ -71,10 +71,11 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
         });
 
         // Normalize price records to lowercase keys and apply deviation
+        const normalizedPrices = normalizePrices(pricesRecRaw);
         const pricesRec: Record<string, { snapshotPrice: number }> = {};
-        for (const [token, price] of Object.entries(pricesRecRaw)) {
-          const factor = priceDeviationFactors[token.toLowerCase()] || 1;
-          pricesRec[token.toLowerCase()] = {
+        for (const [token, price] of Object.entries(normalizedPrices)) {
+          const factor = priceDeviationFactors[token] || 1;
+          pricesRec[token] = {
             snapshotPrice: price.snapshotPrice * factor,
           };
         }

@@ -7,7 +7,7 @@ import { FolioVersion } from "../src/types";
 import { initializeChainState, setupContractsAndSigners } from "./setup";
 import { startRebalance } from "./start-rebalance";
 import { doAuctions } from "./do-auctions";
-import { getAssetPrices, getTokenNameAndSymbol } from "./utils";
+import { getAssetPrices, getTokenNameAndSymbol, normalizePrices } from "./utils";
 
 import { FOLIO_CONFIGS, CHAIN_BLOCK_NUMBERS } from "./4.0.0/config";
 // TODO test V5
@@ -41,12 +41,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
       );
 
       const pricesRecRaw = await getAssetPrices(tokens, folioConfig.chainId, await time.latest());
-
-      // Normalize price records to lowercase keys
-      const pricesRec: Record<string, { snapshotPrice: number }> = {};
-      for (const [token, price] of Object.entries(pricesRecRaw)) {
-        pricesRec[token.toLowerCase()] = price;
-      }
+      const pricesRec = normalizePrices(pricesRecRaw);
 
       const basketValues = rawBalances.map(
         (bal: bigint, i: number) =>
