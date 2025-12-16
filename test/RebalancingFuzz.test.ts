@@ -1,12 +1,17 @@
-import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import hre from "hardhat";
-import { FOLIO_CONFIGS, CHAIN_BLOCK_NUMBERS } from "../../src/test/config";
-import { getAssetPrices, logPercentages } from "../../src/test/utils";
-import { initializeChainState, setupContractsAndSigners } from "../../src/test/setup";
-import { setupRebalance } from "../../src/test/setup-rebalance";
-import { doAuctions } from "../../src/test/do-auctions";
 import { Contract } from "ethers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
+import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
+
+import { FolioVersion } from "../src/types";
+
+import { getAssetPrices, logPercentages, normalizePrices } from "./utils";
+import { initializeChainState, setupContractsAndSigners } from "./setup";
+import { startRebalance } from "./start-rebalance";
+import { doAuctions } from "./do-auctions";
+
+import { FOLIO_CONFIGS, CHAIN_BLOCK_NUMBERS } from "./4.0.0/config";
+// TODO test V5
 
 // Only test BGCI for now
 const TEST_FOLIO_CONFIGS = FOLIO_CONFIGS.filter((f) => f.name === "BGCI");
@@ -66,14 +71,16 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
         });
 
         // Normalize price records to lowercase keys and apply deviation
+        const normalizedPrices = normalizePrices(pricesRecRaw);
         const pricesRec: Record<string, { snapshotPrice: number }> = {};
-        for (const [token, price] of Object.entries(pricesRecRaw)) {
-          const factor = priceDeviationFactors[token.toLowerCase()] || 1;
-          pricesRec[token.toLowerCase()] = {
+        for (const [token, price] of Object.entries(normalizedPrices)) {
+          const factor = priceDeviationFactors[token] || 1;
+          pricesRec[token] = {
             snapshotPrice: price.snapshotPrice * factor,
           };
         }
         const [tokens, assets] = await folio.totalAssets();
+        const initialSupply = await folio.totalSupply();
 
         const assetsRec: Record<string, bigint> = {};
         orderedTokens.forEach((token: string) => {
@@ -122,7 +129,8 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
         // --- Setup the rebalance and execute auctions ---
 
         // Setup the rebalance
-        const initialState = await setupRebalance(
+        await startRebalance(
+          FolioVersion.V4,
           hre,
           { folio, folioLensTyped },
           { bidder, rebalanceManager, auctionLauncher, admin },
@@ -142,14 +150,15 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
 
         // Execute the auctions
         await doAuctions(
+          FolioVersion.V4,
           hre,
           { folio, folioLensTyped },
           { bidder, rebalanceManager, auctionLauncher, admin },
           orderedTokens,
+          initialSupply,
           assetsRec,
           targetBasketRec,
           pricesRec,
-          initialState,
           0.9, // finalStageAt
           false, // debug
           auctionPriceDeviation, // Pass random auction deviation

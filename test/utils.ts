@@ -1,8 +1,9 @@
 import "@nomicfoundation/hardhat-ethers";
+import { Contract } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import { Contract } from "ethers";
-import { bn } from "../numbers";
+
+import { bn } from "../src/numbers";
 
 export function toPlainObject(obj: any): any {
   if (typeof obj !== "object" || obj === null) {
@@ -81,47 +82,10 @@ export const getAssetPrices = async (
     (tokenAddress) => fetch(`${baseUrl}${tokenAddress}`).then((res) => res.json()), // Use original tokenAddress for API call
   );
 
-  const historicalResponses = await (<Promise<HistoricalPriceResponse[]>>Promise.all(calls));
-
-  let foundAll = true;
-  for (const historicalData of historicalResponses) {
-    // Use address from historical data response directly as key
-    const addressFromApi = historicalData.address;
-    const price =
-      historicalData.timeseries.length === 0
-        ? 0
-        : historicalData.timeseries[Math.floor(historicalData.timeseries.length / 2)].price;
-
-    if (result[addressFromApi]) {
-      result[addressFromApi].snapshotPrice = price;
-    } else {
-      // This case can happen if a token was in historical but not current, or casing mismatch
-      // If current price wasn't fetched, we initialize it here.
-      result[addressFromApi] = {
-        currentPrice: 0, // Or some other default/error state
-        snapshotPrice: price,
-      };
-    }
-
-    if (!result[addressFromApi]?.snapshotPrice) {
-      foundAll = false;
-    }
-  }
-
-  // failure case
-  if (!foundAll) {
-    await new Promise((resolve) => setTimeout(resolve, 2000)); // sleep 2s to let the api cooldown
-
-    // add dummy var to end to force cache clear
-    const calls = tokens.map((tokenAddress) =>
-      fetch(`${baseUrl}${tokenAddress}&t=${Date.now()}`).then((res) => res.json()),
-    );
-
-    const historicalResponses = await (<Promise<HistoricalPriceResponse[]>>Promise.all(calls));
-
-    foundAll = true;
-    for (const historicalData of historicalResponses) {
-      // Use address from historical data response directly as key
+  // Helper to process historical responses and update result
+  const processHistoricalResponses = (responses: HistoricalPriceResponse[]): boolean => {
+    let allFound = true;
+    for (const historicalData of responses) {
       const addressFromApi = historicalData.address;
       const price =
         historicalData.timeseries.length === 0
@@ -131,18 +95,33 @@ export const getAssetPrices = async (
       if (result[addressFromApi]) {
         result[addressFromApi].snapshotPrice = price;
       } else {
-        // This case can happen if a token was in historical but not current, or casing mismatch
-        // If current price wasn't fetched, we initialize it here.
         result[addressFromApi] = {
-          currentPrice: 0, // Or some other default/error state
+          currentPrice: 0,
           snapshotPrice: price,
         };
       }
 
       if (!result[addressFromApi]?.snapshotPrice) {
-        foundAll = false;
+        allFound = false;
       }
     }
+    return allFound;
+  };
+
+  const historicalResponses = await (<Promise<HistoricalPriceResponse[]>>Promise.all(calls));
+  let foundAll = processHistoricalResponses(historicalResponses);
+
+  // Retry on failure
+  if (!foundAll) {
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // sleep 2s to let the api cooldown
+
+    // add dummy var to end to force cache clear
+    const retryCalls = tokens.map((tokenAddress) =>
+      fetch(`${baseUrl}${tokenAddress}&t=${Date.now()}`).then((res) => res.json()),
+    );
+
+    const retryResponses = await (<Promise<HistoricalPriceResponse[]>>Promise.all(retryCalls));
+    foundAll = processHistoricalResponses(retryResponses);
   }
 
   if (!foundAll) {
@@ -251,25 +230,14 @@ export async function calculateRebalanceMetrics(
     }
   }
 
-  // Get final prices if needed (for NATIVE mode)
-  // Note: In simulations, we're in the future so we can't fetch historical prices
-  // Just use the prices we already have
-  const finalPricesRec = pricesRec;
-
   // Calculate total value and individual token values
   let totalValueAfterFinal = 0;
   const finalTokenValuesRec: Record<string, number> = {};
 
-  // Create case-insensitive lookup for prices
-  const priceKeys = Object.keys(finalPricesRec);
-  const lowercaseToPriceKey: Record<string, string> = {};
-  for (const key of priceKeys) {
-    lowercaseToPriceKey[key.toLowerCase()] = key;
-  }
+  const { getPrice } = createPriceLookup(pricesRec);
 
   orderedTokens.forEach((token: string) => {
-    const priceKey = lowercaseToPriceKey[token.toLowerCase()];
-    const price = priceKey && finalPricesRec[priceKey] ? finalPricesRec[priceKey].snapshotPrice : 0;
+    const price = getPrice(token);
     const bal = balancesAfterFinalRec[token];
     const decimal = decimalsRec[token];
 
@@ -423,4 +391,17 @@ export function simulateMarketPrices(
   });
 
   return result;
+}
+
+// ============ Price Utilities ============
+
+/**
+ * Normalize price records to lowercase keys for case-insensitive lookups
+ */
+export function normalizePrices<T>(pricesRaw: Record<string, T>): Record<string, T> {
+  const normalized: Record<string, T> = {};
+  for (const [token, price] of Object.entries(pricesRaw)) {
+    normalized[token.toLowerCase()] = price;
+  }
+  return normalized;
 }

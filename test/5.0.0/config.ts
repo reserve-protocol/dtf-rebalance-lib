@@ -1,22 +1,18 @@
-import { Folio } from "../types";
+import { FolioVersion } from "../../src/types";
 
-export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-export const ZERO_BYTES = "0x0000000000000000000000000000000000000000000000000000000000000000";
-
-export const CHAIN_RPC_URLS: Record<number, string | undefined> = {
-  1: process.env.MAINNET_RPC_URL,
-  8453: process.env.BASE_RPC_URL,
-  56: process.env.BSC_RPC_URL,
-};
+import { FolioConfig } from "../types";
 
 export const CHAIN_BLOCK_NUMBERS: Record<number, number | undefined> = {
-  1: 23078902,
-  8453: 33430815,
-  56: 68198556,
+  1: 23078902, // TODO
+  8453: 33430815, // TODO
+  56: 68198556, // TODO
 };
 
-export const FOLIO_CONFIGS: Folio[] = [
+// TODO configs broken since still on V4
+
+export const FOLIO_CONFIGS: FolioConfig[] = [
   {
+    version: FolioVersion.V5,
     name: "OPEN",
     chainId: 1,
     folio: "0x323c03c48660fe31186fa82c289b0766d331ce21",
@@ -24,6 +20,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0xe7b6c199bbb1b4c08efdadd4bbe99d246ac9a7dd",
   },
   {
+    version: FolioVersion.V5,
     name: "BED",
     chainId: 1,
     folio: "0x4E3B170DcBe704b248df5f56D488114acE01B1C5",
@@ -31,6 +28,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0xe7b6c199bbb1b4c08efdadd4bbe99d246ac9a7dd",
   },
   {
+    version: FolioVersion.V5,
     name: "DGI",
     chainId: 1,
     folio: "0x9a1741E151233a82Cf69209A2F1bC7442B1fB29C",
@@ -38,6 +36,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0x665339c6e5168a0f23e5a1adab568027e8df2673",
   },
   {
+    version: FolioVersion.V5,
     name: "DFX",
     chainId: 1,
     folio: "0x188D12Eb13a5Eadd0867074ce8354B1AD6f4790b",
@@ -45,6 +44,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0x1742b681cabe3111598e1be2a9313c787fe906c6",
   },
   {
+    version: FolioVersion.V5,
     name: "mvDEFI",
     chainId: 1,
     folio: "0x20d81101D254729a6E689418526bE31e2c544290",
@@ -52,6 +52,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0x5aaa18f0f1449a43f4de5e4c175885da4f70af04",
   },
   {
+    version: FolioVersion.V5,
     name: "SMEL",
     chainId: 1,
     folio: "0xF91384484F4717314798E8975BCd904A35fc2BF1",
@@ -59,6 +60,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0x41e2aa9b0f6c2600f21cfb88473e73745a28b50f",
   },
   {
+    version: FolioVersion.V5,
     name: "mvRWA",
     chainId: 1,
     folio: "0xA5cdea03B11042fc10B52aF9eCa48bb17A2107d2",
@@ -66,6 +68,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0x87a7cd8ec8d6e3a87ac57ef1bec3b5f3c72080f7",
   },
   {
+    version: FolioVersion.V5,
     name: "BGCI",
     chainId: 8453,
     folio: "0x23418de10d422ad71c9d5713a2b8991a9c586443",
@@ -73,6 +76,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0xc94a762854d7d3a0252e6c00a23c9360978ccb57",
   },
   {
+    version: FolioVersion.V5,
     name: "CLX",
     chainId: 8453,
     folio: "0x44551CA46Fa5592bb572E20043f7C3D54c85cAD7",
@@ -80,6 +84,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0x106f0302d12a51691b278bd04b1b447cce4a9943",
   },
   {
+    version: FolioVersion.V5,
     name: "ABX",
     chainId: 8453,
     folio: "0xeBcda5b80f62DD4DD2A96357b42BB6Facbf30267",
@@ -87,6 +92,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0x0e7049f86d7ef4f724104a1c62290f8b7fc9ac38",
   },
   {
+    version: FolioVersion.V5,
     name: "MVTT10F",
     chainId: 8453,
     folio: "0xe8b46b116D3BdFA787CE9CF3f5aCC78dc7cA380E",
@@ -94,6 +100,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0x65e90cbf1e03150273808506a4d16e32ac50ec7f",
   },
   {
+    version: FolioVersion.V5,
     name: "MVDA25",
     chainId: 8453,
     folio: "0xD600e748C17Ca237Fcb5967Fa13d688AFf17Be78",
@@ -101,6 +108,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0xac0fb1e80e96a6bb30d8afc83c7e3e1e666e8177",
   },
   {
+    version: FolioVersion.V5,
     name: "BDTF",
     chainId: 8453,
     folio: "0xb8753941196692E322846cfEE9C14C97AC81928A",
@@ -108,6 +116,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0xa9e47a079de056854d3e0ffd48b87e6e8c096b84",
   },
   {
+    version: FolioVersion.V5,
     name: "AI",
     chainId: 8453,
     folio: "0xfe45EDa533e97198d9f3dEEDA9aE6c147141f6F9",
@@ -115,6 +124,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0xc3bb42e45e6bb5cd825e063e7bb31e8fec6fce7b",
   },
   {
+    version: FolioVersion.V5,
     name: "VTF",
     chainId: 8453,
     folio: "0x47686106181b3cefe4eaf94c4c10b48ac750370b",
@@ -122,6 +132,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0xc570368439b4e26e30e6fb8a51122b1d33c3b3ba",
   },
   {
+    version: FolioVersion.V5,
     name: "LCAP",
     chainId: 8453,
     folio: "0x4da9a0f397db1397902070f93a4d6ddbc0e0e6e8",
@@ -129,6 +140,7 @@ export const FOLIO_CONFIGS: Folio[] = [
     basketGovernor: "0xf9edb4491fbd5e1185e05ecba2d69251dd869096",
   },
   {
+    version: FolioVersion.V5,
     name: "CMC20",
     chainId: 56,
     folio: "0x2f8a339b5889ffac4c5a956787cda593b3c36867",

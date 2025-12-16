@@ -1,6 +1,6 @@
 {
   "name": "@reserve-protocol/dtf-rebalance-lib",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "description": "Rebalancing library for DTFs in typescript",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -16,8 +16,8 @@
     "build": "npm run clean && tsc --project tsconfig.build.json",
     "prepublishOnly": "npm run build",
     "test": "npm run test:unit && npm run test:e2e",
-    "test:unit": "node --test --require ts-node/register test/unit/*.test.ts",
-    "test:e2e": "hardhat test test/e2e/*.test.ts --bail"
+    "test:unit": "node --test --require ts-node/register test/**/unit.test.ts",
+    "test:e2e": "hardhat test test/*.test.ts --bail"
   },
   "publishConfig": {
     "access": "public"
