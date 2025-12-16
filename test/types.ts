@@ -23,13 +23,3 @@ export interface RebalanceSigners {
   rebalanceManager: HardhatEthersSigner;
   auctionLauncher: HardhatEthersSigner;
 }
-
-export interface RebalanceInitialState {
-  initialTokens: string[];
-  initialAssets: bigint[];
-  initialSupply: bigint;
-  startRebalanceArgs: {
-    tokens: any[];
-    limits: any;
-  };
-}

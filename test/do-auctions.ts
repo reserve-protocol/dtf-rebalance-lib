@@ -6,20 +6,23 @@ import { Contract } from "ethers";
 
 import { bn } from "../src/numbers";
 import { whileImpersonating, toPlainObject, createPriceLookup, logPercentages } from "./utils";
-import { AuctionMetrics, AuctionRound, FolioVersion, OpenAuctionArgs, PriceRange, WeightRange } from "../src/types";
+import { AuctionMetrics, AuctionRound, FolioVersion, OpenAuctionArgs, WeightRange } from "../src/types";
 import { getOpenAuction, getTargetBasket } from "../src/open-auction";
-import { RebalanceContracts, RebalanceSigners, RebalanceInitialState } from "./types";
+import { RebalanceContracts, RebalanceSigners } from "./types";
+
+import { Rebalance as Rebalance_4_0_0 } from "../src/4.0.0/types";
+import { Rebalance as Rebalance_5_0_0 } from "../src/types";
 
 export async function doAuctions(
   version: FolioVersion,
   hre: HardhatRuntimeEnvironment,
   contracts: RebalanceContracts,
   signers: RebalanceSigners,
-  rebalanceTokens: string[],
+  orderedTokens: string[],
+  initialSupply: bigint,
   initialAssetsRec: Record<string, bigint>,
   targetBasketRec: Record<string, bigint>,
   rebalancePricesRec: Record<string, { snapshotPrice: number }>,
-  initialState: RebalanceInitialState,
   finalStageAt: number,
   debug?: boolean,
   auctionPriceDeviation: number = 0.02,
@@ -31,11 +34,10 @@ export async function doAuctions(
 
   const { folio, folioLensTyped } = contracts;
   const { bidder, auctionLauncher } = signers;
-  const { initialTokens, initialSupply, initialAssets, startRebalanceArgs } = initialState;
 
   // Get decimals for all tokens
   const allDecimalsRec: Record<string, bigint> = {};
-  for (const token of rebalanceTokens) {
+  for (const token of orderedTokens) {
     const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
     allDecimalsRec[token] = await tokenContract.decimals();
   }
@@ -43,22 +45,18 @@ export async function doAuctions(
   const currentSupply = await folio.totalSupply();
 
   // Validate all tokens have prices
-  const missingPrices: string[] = [];
-  for (const token of rebalanceTokens) {
+  for (const token of orderedTokens) {
     const priceKey = token.toLowerCase();
+
     if (!rebalancePricesRec[priceKey] || !rebalancePricesRec[priceKey].snapshotPrice) {
-      missingPrices.push(token);
+      throw new Error(
+        `Missing price data for token: ${token}\n` +
+          `All tokens must have valid price data in rebalancePricesRec before running auctions.`,
+      );
     }
   }
 
-  if (missingPrices.length > 0) {
-    throw new Error(
-      `Missing price data for the following tokens: ${missingPrices.join(", ")}\n` +
-        `All tokens must have valid price data in rebalancePricesRec before running auctions.`,
-    );
-  }
-
-  for (const token of rebalanceTokens) {
+  for (const token of orderedTokens) {
     if (!(token in initialAssetsRec)) {
       throw new Error(`Token ${token} from tokens not found in initialAssetsRec`);
     }
@@ -66,16 +64,16 @@ export async function doAuctions(
       throw new Error(`Token ${token} from tokens not found in targetBasketRec`);
     }
   }
-  if (Object.keys(initialAssetsRec).length !== rebalanceTokens.length) {
+  if (Object.keys(initialAssetsRec).length !== orderedTokens.length) {
     throw new Error("Mismatch between tokens length and initialAssetsRec keys");
   }
-  if (Object.keys(targetBasketRec).length !== rebalanceTokens.length) {
+  if (Object.keys(targetBasketRec).length !== orderedTokens.length) {
     throw new Error("Mismatch between tokens length and targetBasketRec keys");
   }
 
   const [weightControl] = await folio.rebalanceControl();
 
-  const targetBasketArray = rebalanceTokens.map((token) => targetBasketRec[token]);
+  const targetBasketArray = orderedTokens.map((token) => targetBasketRec[token]);
 
   if (debug) {
     console.log(
@@ -88,7 +86,7 @@ export async function doAuctions(
   const ERC20MockFactory = await hre.ethers.getContractFactory("ERC20Mock");
   const mockedTokensRec: Record<string, Contract> = {};
 
-  for (const asset of rebalanceTokens) {
+  for (const asset of orderedTokens) {
     const tokenContract = (await hre.ethers.getContractAt("ERC20Mock", asset)) as unknown as Contract;
     const balBefore = await tokenContract.balanceOf(await folio.getAddress());
 
@@ -129,8 +127,10 @@ export async function doAuctions(
   };
 
   const doAuction = async (auctionNumber: number): Promise<[OpenAuctionArgs, AuctionMetrics]> => {
-    const rebalanceState = await folio.getRebalance();
-    // can have fewer tokens than rebalanceTokens, because some have been successfully ejected
+    // can have fewer tokens than orderedTokens, because some have been successfully ejected
+    const rebalanceState: Rebalance_4_0_0 | Rebalance_5_0_0 = await folio.getRebalance();
+    const rebalanceState4_0_0 = rebalanceState as Rebalance_4_0_0;
+    const rebalanceState5_0_0 = rebalanceState as Rebalance_5_0_0;
 
     const [currentTokens, currentAssets] = await folio.totalAssets();
     const currentValues: Record<string, number> = {};
@@ -148,7 +148,7 @@ export async function doAuctions(
       totalCurrentValue += currentValues[token];
     });
 
-    const currentBasket = rebalanceTokens.map((token: string) => {
+    const currentBasket = orderedTokens.map((token: string) => {
       const val = currentValues[token] || 0;
       const percentage = (val / totalCurrentValue) * 100;
       return percentage === 0 ? "00.00%" : `${percentage.toFixed(2)}%`;
@@ -158,102 +158,84 @@ export async function doAuctions(
     console.log(`\n📊 Auction ${auctionNumber} [${currentBasket.join(", ")}]`);
 
     // rebalanceState was already fetched above
-    expect(rebalanceState.availableUntil).to.be.greaterThan(await time.latest());
+    const availableUntil =
+      version === FolioVersion.V4 ? rebalanceState4_0_0.availableUntil : rebalanceState5_0_0.timestamps.availableUntil;
+    expect(availableUntil).to.be.greaterThan(await time.latest());
 
     // ==============================
 
-    const initialPrices: PriceRange[] = [];
-    const assets: bigint[] = [];
-    const inRebalance: boolean[] = [];
-    const auctionPrices: number[] = [];
+    // About the original start rebalance
+    const initialWeights: WeightRange[] = [];
+    const initialAssets: bigint[] = [];
+    const initialPrices: number[] = [];
 
-    const originalWeights: WeightRange[] = [];
-    const rebalancePrices: number[] = [];
+    // About the current auction
+    const assets: bigint[] = [];
+    const decimals: bigint[] = [];
+    const deviatedAuctionPrices: number[] = [];
 
     // Populate auction calldata
     {
       // Build arrays in rebalanceState.tokens order, not tokens order
       for (let idx = 0; idx < rebalanceState.tokens.length; idx++) {
-        const token = rebalanceState.tokens[idx];
-        if (rebalanceTokens.indexOf(token) < 0) {
-          throw new Error(`Token ${token} in rebalance state but not in rebalanceTokens`);
+        const token =
+          version === FolioVersion.V4 ? rebalanceState4_0_0.tokens[idx] : rebalanceState5_0_0.tokens[idx].token;
+
+        if (orderedTokens.indexOf(token) < 0) {
+          throw new Error(`Token ${token} in rebalance state but not in orderedTokens`);
         }
 
-        // Find the token's position in the original startRebalanceArgs.tokens array
-        // startRebalanceArgs was created with tokens, so we need to find the token there
-        const startRebalanceIdx = rebalanceTokens.indexOf(token);
-        if (startRebalanceIdx === -1) {
-          throw new Error(`Token ${token} not found in original tokens`);
-        }
+        // === initialWeights ===
+        const originalWeight =
+          version === FolioVersion.V4 ? rebalanceState4_0_0.weights[idx] : rebalanceState5_0_0.tokens[idx].weight;
+        initialWeights.push(originalWeight);
 
-        initialPrices.push(startRebalanceArgs.prices[startRebalanceIdx]); // Use the original index from startRebalanceArgs
+        // === initialAssets ===
+        initialAssets.push(initialAssetsRec[token]);
 
-        assets.push(currentAssets[idx]);
-        inRebalance.push(rebalanceState.inRebalance[idx]);
-        auctionPrices.push(rebalancePricesRec[token.toLowerCase()].snapshotPrice);
-        originalWeights.push(startRebalanceArgs.weights[startRebalanceIdx]); // Use the original index from startRebalanceArgs
+        // === initialPrices ===
+        const originalPrice =
+          version === FolioVersion.V4 ? rebalanceState4_0_0.initialPrices[idx] : rebalanceState5_0_0.tokens[idx].price;
 
-        // recover original avgs used to construct startRebalanceArgs.prices
-        const historicalPrice = startRebalanceArgs.prices[startRebalanceIdx];
-        const divisor = 10n ** 36n / 10n ** allDecimalsRec[token]; // 10^(27+9) / 10^decimals
-        const lowPriceUSD = Number(historicalPrice.low) / Number(divisor);
-        const highPriceUSD = Number(historicalPrice.high) / Number(divisor);
+        // {USD/wholeTok} = D27{nanoUSD/tok} / D27 / {nanoUSD/USD} * {tok/wholeTok}
+        const lowPriceUSD = Number(originalPrice.low) / Number(10n ** 36n / 10n ** allDecimalsRec[token]);
+        const highPriceUSD = Number(originalPrice.high) / Number(10n ** 36n / 10n ** allDecimalsRec[token]);
         // Use geometric mean for consistency with convertProposalPricesToUSD
-        rebalancePrices.push(Math.sqrt(lowPriceUSD * highPriceUSD));
+        initialPrices.push(Math.sqrt(lowPriceUSD * highPriceUSD));
+
+        // === assets ===
+        assets.push(currentAssets[idx]);
+
+        // === decimals ===
+        decimals.push(allDecimalsRec[token]);
+
+        // === deviatedAuctionPrices ===
+        const auctionPrice = rebalancePricesRec[token.toLowerCase()].snapshotPrice;
+        // Generate random factor between (1 - deviation) and (1 + deviation)
+        const deviatedPrice = auctionPrice * (1 - auctionPriceDeviation + Math.random() * (2 * auctionPriceDeviation));
+        deviatedAuctionPrices.push(deviatedPrice);
       }
     }
-
-    // Apply random price deviation to auction prices
-    // Each price gets a random deviation within ±auctionPriceDeviation
-    const deviatedAuctionPrices = auctionPrices.map((price: number) => {
-      // Generate random factor between (1 - deviation) and (1 + deviation)
-      const factor = 1 - auctionPriceDeviation + Math.random() * (2 * auctionPriceDeviation);
-      return price * factor;
-    });
-
-    // Build decimalsArray in rebalanceState.tokens order
-    const decimalsArrayRebalanceOrder = rebalanceState.tokens.map((token: string) => allDecimalsRec[token]);
-
-    // Build initialAmountsArray in rebalanceState.tokens order
-    // Use the amounts captured BEFORE any auctions started
-    const initialAssetsArrayRebalanceOrder = rebalanceState.tokens.map((token: string) => {
-      const idx = initialTokens.findIndex((t: string) => t.toLowerCase() === token.toLowerCase());
-      if (idx === -1) {
-        throw new Error(`Token ${token} from rebalanceState not found in initialTokens`);
-      }
-      return initialAssets[idx];
-    });
 
     // which target basket we pass to getOpenAuction() depends on TRACKING vs NATIVE weightControl
     // TRACKING (weightControl = false): use CURRENT auction prices (with deviation)
     // NATIVE (weightControl = true): use HISTORICAL prices from proposal
     const auctionTargetBasket = getTargetBasket(
-      originalWeights,
-      weightControl ? rebalancePrices : deviatedAuctionPrices,
-      decimalsArrayRebalanceOrder,
+      initialWeights,
+      weightControl ? initialPrices : deviatedAuctionPrices,
+      decimals,
       debug,
     );
 
     const [openAuctionArgsLocal, auctionMetrics] = getOpenAuction(
-      FolioVersion.V4,
-      {
-        nonce: rebalanceState.nonce,
-        tokens: rebalanceState.tokens,
-        weights: rebalanceState.weights,
-        initialPrices: initialPrices,
-        inRebalance: inRebalance,
-        limits: rebalanceState.limits,
-        startedAt: rebalanceState.startedAt,
-        restrictedUntil: rebalanceState.restrictedUntil,
-        availableUntil: rebalanceState.availableUntil,
-        priceControl: rebalanceState.priceControl,
-      },
+      version,
+      rebalanceState,
       currentSupply,
       initialSupply,
-      initialAssetsArrayRebalanceOrder,
+      initialAssets,
       auctionTargetBasket,
       assets,
-      decimalsArrayRebalanceOrder,
+      decimals,
       deviatedAuctionPrices,
       deviatedAuctionPrices.map((_: number) => auctionPriceDeviation),
       finalStageAt,
@@ -377,7 +359,7 @@ export async function doAuctions(
   expect(auctionMetrics.target).to.be.closeTo(1, TOLERANCE);
 
   // Verify all tokens with weight 0 have been fully ejected
-  for (const token of rebalanceTokens) {
+  for (const token of orderedTokens) {
     if (targetBasketRec[token] === 0n) {
       expect(await mockedTokensRec[token].balanceOf(await folio.getAddress())).to.equal(0);
     }
@@ -388,7 +370,7 @@ export async function doAuctions(
   const [finalTokens, finalAssets] = await folio.totalAssets();
 
   const balancesAfterFinalRec: Record<string, bigint> = {};
-  rebalanceTokens.forEach((token: string) => {
+  orderedTokens.forEach((token: string) => {
     const idx = finalTokens.indexOf(token);
     balancesAfterFinalRec[token] = idx >= 0 ? finalAssets[idx] : 0n;
   });
@@ -396,7 +378,7 @@ export async function doAuctions(
   // these value calculations have to use the initial prices, not current prices
   let totalValueAfterFinal = 0;
   const finalTokenValuesRec: Record<string, number> = {};
-  rebalanceTokens.forEach((token: string) => {
+  orderedTokens.forEach((token: string) => {
     const price = rebalancePricesRec[token.toLowerCase()].snapshotPrice;
     const bal = balancesAfterFinalRec[token];
     const decimal = allDecimalsRec[token];
@@ -406,12 +388,12 @@ export async function doAuctions(
   });
 
   const finalTargetBasketRec: Record<string, bigint> = {};
-  rebalanceTokens.forEach((token: string) => {
+  orderedTokens.forEach((token: string) => {
     finalTargetBasketRec[token] = bn(((finalTokenValuesRec[token] / totalValueAfterFinal) * 10 ** 18).toString());
   });
 
   // calculate error from intended target
-  const totalErrorSquared = rebalanceTokens
+  const totalErrorSquared = orderedTokens
     .map((token: string) => {
       const diff =
         targetBasketRec[token] > finalTargetBasketRec[token]
@@ -424,8 +406,8 @@ export async function doAuctions(
 
   const totalError = Math.sqrt(Number(totalErrorSquared) / 10 ** 18);
 
-  logPercentages(`\n🔍 Final    `, finalTargetBasketRec, rebalanceTokens);
-  logPercentages(`🎯 Target   `, targetBasketRec, rebalanceTokens);
+  logPercentages(`\n🔍 Final    `, finalTargetBasketRec, orderedTokens);
+  logPercentages(`🎯 Target   `, targetBasketRec, orderedTokens);
 
   if (totalError > 10n ** 14n) {
     console.log(`⚠️ Error     ${(totalError * 100).toFixed(2)}%\n`);

@@ -5,7 +5,7 @@ import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { whileImpersonating } from "./utils";
 import { getStartRebalance } from "../src/start-rebalance";
 import { FolioVersion } from "../src/types";
-import { RebalanceContracts, RebalanceSigners, RebalanceInitialState } from "./types";
+import { RebalanceContracts, RebalanceSigners } from "./types";
 
 import { StartRebalanceArgsPartial as StartRebalanceArgsPartial_4_0_0 } from "../src/4.0.0/types";
 import { StartRebalanceArgsPartial as StartRebalanceArgsPartial_5_0_0 } from "../src/types";
@@ -21,7 +21,7 @@ export async function startRebalance(
   priceDeviation: number = 0.5,
   debug?: boolean,
   governanceDelayDays?: number,
-): Promise<RebalanceInitialState> {
+): Promise<void> {
   const { folio } = contracts;
   const { rebalanceManager } = signers;
 
@@ -108,15 +108,9 @@ export async function startRebalance(
         )
       ).wait();
     } else if (version === FolioVersion.V5) {
-      throw new Error(`only version 4.0.0 implemented for now: ${version}`);
-
-      // TODO update when v5 Folio are live
-
       await (
         await (folio.connect(signer) as any).startRebalance(
-          (startRebalanceArgs as StartRebalanceArgsPartial_5_0_0).tokens.map((t: any) => t.token),
-          (startRebalanceArgs as StartRebalanceArgsPartial_5_0_0).tokens.map((t: any) => t.weight),
-          (startRebalanceArgs as StartRebalanceArgsPartial_5_0_0).tokens.map((t: any) => t.price),
+          (startRebalanceArgs as StartRebalanceArgsPartial_5_0_0).tokens,
           (startRebalanceArgs as StartRebalanceArgsPartial_5_0_0).limits,
           0n,
           1000000n,
@@ -126,11 +120,4 @@ export async function startRebalance(
       throw new Error(`Unsupported version: ${version}`);
     }
   });
-
-  return {
-    initialTokens: tokens,
-    initialAssets,
-    initialSupply,
-    startRebalanceArgs,
-  };
 }

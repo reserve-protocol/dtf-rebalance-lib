@@ -79,6 +79,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
           };
         }
         const [tokens, assets] = await folio.totalAssets();
+        const initialSupply = await folio.totalSupply();
 
         const assetsRec: Record<string, bigint> = {};
         orderedTokens.forEach((token: string) => {
@@ -127,7 +128,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
         // --- Setup the rebalance and execute auctions ---
 
         // Setup the rebalance
-        const initialState = await startRebalance(
+        await startRebalance(
           FolioVersion.V4,
           hre,
           { folio, folioLensTyped },
@@ -153,10 +154,10 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
           { folio, folioLensTyped },
           { bidder, rebalanceManager, auctionLauncher, admin },
           orderedTokens,
+          initialSupply,
           assetsRec,
           targetBasketRec,
           pricesRec,
-          initialState,
           0.9, // finalStageAt
           false, // debug
           auctionPriceDeviation, // Pass random auction deviation

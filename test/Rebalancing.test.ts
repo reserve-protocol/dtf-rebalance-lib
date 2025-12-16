@@ -31,6 +31,8 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
       const { admin, folio, folioLensTyped, bidder, rebalanceManager, auctionLauncher } =
         await loadFixture(deployFixture);
 
+      const initialSupply = await folio.totalSupply();
+
       const [basket, rawBalances] = await folio.totalAssets();
       const tokens = [...basket];
 
@@ -98,7 +100,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
       }
 
       // Setup the rebalance
-      const initialState = await startRebalance(
+      await startRebalance(
         FolioVersion.V4,
         hre,
         { folio, folioLensTyped },
@@ -117,10 +119,10 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
         { folio, folioLensTyped },
         { bidder, rebalanceManager, auctionLauncher, admin },
         tokens,
+        initialSupply,
         initialAssetsRec,
         targetBasketRec,
         pricesRec,
-        initialState,
         0.9, // finalStageAt
         false, // debug
       );
