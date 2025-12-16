@@ -20,6 +20,8 @@ import { FOLIO_CONFIGS } from "../test/4.0.0/config";
 
 import FolioGovernorArtifact from "../out/FolioGovernor.sol/FolioGovernor.json";
 
+// TODO this probably doesn't work for V5 Folios yet
+
 task("simulate", "Run a live rebalance simulation for a governance proposal")
   .addParam("id", "The governance proposal ID")
   .addParam("symbol", "The Folio symbol (e.g., DFX, BED)")
@@ -622,8 +624,12 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     }
 
     // Capture initial state after proposal execution
-    const [initialRebalanceTokens, initialAssets] = await folio.totalAssets();
     const initialSupply = await folio.totalSupply();
+    const [initialRebalanceTokens, initialAssets] = await folio.totalAssets();
+    const initialAssetsRec: Record<string, bigint> = {};
+    initialRebalanceTokens.forEach((token: string, i: number) => {
+      initialAssetsRec[token] = initialAssets[i];
+    });
 
     // Create the initial state object needed for doAuctions
     // We need to reconstruct startRebalanceArgs from the proposal data
@@ -666,24 +672,6 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       }
     }
 
-    const startRebalanceArgs = {
-      tokens: allTokens,
-      weights: reorderedWeights,
-      prices: reorderedPrices,
-      limits: {
-        low: BigInt(decoded[3][0].toString()),
-        spot: BigInt(decoded[3][1].toString()),
-        high: BigInt(decoded[3][2].toString()),
-      },
-    };
-
-    const initialState = {
-      initialTokens: initialRebalanceTokens,
-      initialAssets,
-      initialSupply,
-      startRebalanceArgs,
-    };
-
     // Validate that all tokens have valid prices before running auctions
     const tokensWithoutPrices: string[] = [];
     for (const token of allTokens) {
@@ -718,7 +706,7 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     const targetCalculationPrices = allTokens.map((token) => baselinePriceLookup.getPrice(token));
 
     const normalizedTargetArray = getTargetBasket(
-      startRebalanceArgs.weights,
+      reorderedWeights,
       targetCalculationPrices,
       allTokenDecimals,
       false, // debug
@@ -742,20 +730,16 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     console.log(`   📊 Auction price deviation: ${(auctionPriceDeviation * 100).toFixed(1)}%`);
     console.log(`   💱 Swap slippage range: ${(minSlippage * 100).toFixed(2)}% - ${(maxSlippage * 100).toFixed(2)}%`);
 
-    // Always pass baseline prices for consistent measurement
-    // doAuctions will apply its own deviation internally for auction execution
-    const pricesForDoAuctions = baselinePriceRec;
-
     const { totalRebalancedValue } = await doAuctions(
-      FolioVersion.V4,
+      folioVersion === "4.0.0" ? FolioVersion.V4 : FolioVersion.V5,
       hre,
       { folio, folioLensTyped },
       { bidder, rebalanceManager, auctionLauncher, admin },
       allTokens,
-      currentAmountsRec,
-      normalizedTargetBasketRec, // Use normalized percentages instead of raw weights
-      pricesForDoAuctions, // Use appropriate prices based on weightControl
-      initialState,
+      initialSupply,
+      initialAssetsRec,
+      targetBasketRec,
+      baselinePriceRec,
       0.9, // finalStageAt
       false, // debug
       auctionPriceDeviation,
