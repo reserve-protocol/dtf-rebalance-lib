@@ -103,26 +103,27 @@ export const getStartRebalance = (
     // D27{tok/share}{wholeShare/wholeTok} = D27 * {tok/wholeTok} / {share/wholeShare}
     const limitMultiplier = D27d.mul(new Decimal(`1e${decimals[i]}`)).div(D18d);
 
-    if (spotWeight.eq(ZERO)) {
-      newWeights.push({
-        low: 0n,
-        spot: 0n,
-        high: 0n,
-      });
-    } else if (weightControl) {
+    if (weightControl) {
       // NATIVE case
-
-      // {wholeTok/wholeShare} = {wholeTok/wholeShare} / {1}
-      const lowWeight = spotWeight.mul(ONE.sub(priceError[i]));
-      const highWeight = spotWeight.div(ONE.sub(priceError[i]));
 
       // D27{tok/share} = {wholeTok/wholeShare} * D27{tok/share}{wholeShare/wholeTok} / {BU/share}
       newWeights.push({
-        low: deferWeights ? 0n : bn(lowWeight.mul(limitMultiplier)),
+        low: bn(spotWeight.mul(ONE.sub(priceError[i])).mul(limitMultiplier)),
         spot: bn(spotWeight.mul(limitMultiplier)),
-        high: deferWeights ? D27n * D27n : bn(highWeight.mul(limitMultiplier)),
+        high: bn(spotWeight.div(ONE.sub(priceError[i])).mul(limitMultiplier)),
       });
-      // 1e54 MAX_WEIGHT
+
+      // deferWeights case (ONLY for NATIVE)
+      if (deferWeights) {
+        newWeights[i].low = 0n;
+
+        // prevent removeFromBasket() griefing for removals
+        if (newWeights[i].spot == 0n) {
+          newWeights[i].spot = 1n;
+        }
+
+        newWeights[i].high = D27n * D27n;
+      }
     } else {
       // TRACKING case
 
@@ -132,6 +133,16 @@ export const getStartRebalance = (
         spot: bn(spotWeight.mul(limitMultiplier)),
         high: bn(spotWeight.mul(limitMultiplier)),
       });
+    }
+
+    // check if weights are valid
+    if (
+      newWeights[i].low < 0n ||
+      newWeights[i].low > newWeights[i].spot ||
+      newWeights[i].spot > newWeights[i].high ||
+      newWeights[i].high > D27n * D27n
+    ) {
+      throw new Error(`invalid weights for token ${tokens[i]}`);
     }
 
     // === newPrices ===
