@@ -113,7 +113,7 @@ export const getStartRebalance = (
         high: bn(spotWeight.div(ONE.sub(priceError[i])).mul(limitMultiplier)),
       });
 
-      // deferWeights case (ONLY for NATIVE)
+      // deferWeights case
       if (deferWeights) {
         newWeights[i].low = 0n;
 
