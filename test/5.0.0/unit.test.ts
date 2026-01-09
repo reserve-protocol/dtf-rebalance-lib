@@ -176,7 +176,7 @@ describe("NATIVE DTFs", () => {
 
       // Verify that deferWeights set the weights and limits correctly
       assert.equal(weightsDeferred[0].low, 0n); // USDC target is 0, so low stays 0
-      assert.equal(weightsDeferred[0].high, 0n); // USDC target is 0, so high stays 0
+      assert.equal(weightsDeferred[0].high, bn("1e54")); // deferWeights sets high to 1e54 for all tokens
       assert.equal(weightsDeferred[1].low, 0n); // DAI low should be 0 (deferWeights sets low to 0)
       assert.equal(weightsDeferred[1].high, bn("1e54")); // DAI high should be 1e54 (D27n * D27n)
       assert.equal(weightsDeferred[2].low, 0n); // USDT low should be 0 (deferWeights sets low to 0)
@@ -209,27 +209,27 @@ describe("NATIVE DTFs", () => {
         finalStageAtForTest,
       );
 
-      // The getOpenAuction function will calculate ideal weights and then clamp them
-      // With deferWeights, the weight ranges are extremely wide (low=0, high=1e54)
-      // During EJECT, high weights are kept at their original values
+      // The getOpenAuction function calculates ideal weights based on target basket
+      // With deferWeights, the initial weight ranges are wide (low=0, high=1e54)
+      // but getOpenAuction computes appropriate weights for the auction
       assertOpenAuctionArgsEqual(openAuctionArgs, {
         rebalanceNonce: 1n,
         tokens: tokens,
         newWeights: [
-          weightsDeferred[0], // USDC: unchanged (still 0)
+          { low: 0n, spot: 0n, high: 0n }, // USDC: target is 0, so all zeros
           {
-            low: bn("500000000000000000000000000"), // Current implementation returns spot value
-            spot: bn("500000000000000000000000000"),
-            high: bn("1e54"), // Keep original high weight unchanged during ejection
+            low: bn("500000000000000500000000000"),
+            spot: bn("500000000000000500000000000"),
+            high: bn("549999999999999950000000000"),
           },
           {
-            low: bn("500000000000000"), // Current implementation returns spot value
-            spot: bn("500000000000000"),
-            high: bn("1e54"), // Keep original high weight unchanged during ejection
+            low: bn("500000000000001"),
+            spot: bn("500000000000001"),
+            high: bn("550000000000000"),
           },
         ],
         newPrices: defaultExpectedPrices_USDC_DAI_USDT,
-        newLimits: { low: bn("0.9e18"), spot: bn("1e18"), high: bn("1e18") }, // getOpenAuction returns modified limits
+        newLimits: { low: bn("0.9e18"), spot: bn("1e18"), high: bn("1e18") },
       });
     });
 
