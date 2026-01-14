@@ -1,6 +1,6 @@
 import DecimalLight from "decimal.js-light";
-import { bn, D18d, D18n, D27n, ZERO } from "./numbers";
-import { WeightRange, RebalanceLimits } from "./types";
+import { bn, D18d, D27d } from "./numbers";
+import { WeightRange } from "./types";
 
 // Create a local Decimal constructor with custom precision
 export const Decimal = DecimalLight.clone({ precision: 100 });
@@ -33,45 +33,48 @@ export const getBasketDistribution = (_bals: bigint[], _prices: number[], decima
 /**
  * Calculate how accurately balances reflect weights
  *
- * @param supply {share} Current total supply
  * @param _bals {tok} Current balances
  * @param _prices {USD/wholeTok} Current USD prices for each *whole* token
- * @param decimals Decimals of each token
- * @param weights Current weights from getRebalance.weights
- * @param limits Current limits from getRebalance.limits
+ * @param _decimals Decimals of each token
+ * @param _weights D27{tok/BU} Current weights from getRebalance.weights
  * @returns {1} Basket accuracy
  */
 export const getBasketAccuracy = (
-  supply: bigint,
   _bals: bigint[],
   _prices: number[],
-  decimals: bigint[],
-  weights: WeightRange[],
-  limits: RebalanceLimits,
+  _decimals: bigint[],
+  _weights: WeightRange[],
 ): number => {
-  const decimalScale = decimals.map((d) => new Decimal(`1e${d}`));
+  const decimalScale = _decimals.map((d) => new Decimal(`1e${d}`));
 
   // {USD/wholeTok} = {USD/wholeTok}
   const prices = _prices.map((a) => new Decimal(a.toString()));
 
-  // {USD}
-  let totalValue = ZERO;
-  let surplusValue = ZERO;
+  // {wholeTok} = {tok} / {tok/wholeTok}
+  const bals = _bals.map((bal, i) => new Decimal(bal.toString()).div(decimalScale[i]));
 
-  for (let i = 0; i < weights.length; i++) {
-    // {tok} = D27{tok/BU} * D18{BU/share} * {share} / D27 / D18
-    const expectedBal = (weights[i].spot * limits.spot * supply) / D27n / D18n;
+  // {wholeTok/BU} = D27{tok/BU} / D27 / {tok/wholeTok}
+  const spotWeights = _weights.map((_weight, i) => new Decimal(_weight.spot.toString()).div(D27d).div(decimalScale[i]));
 
-    if (_bals[i] > expectedBal) {
-      // {USD} += {tok} * {USD/wholeTok} / {tok/wholeTok}
-      surplusValue = surplusValue.add(
-        new Decimal((_bals[i] - expectedBal).toString()).mul(prices[i]).div(decimalScale[i]),
-      );
-    }
+  // compute $ value of balances
+  // {USD} = {wholeTok} * {USD/wholeTok}
+  const allValue = bals.map((bal, i) => bal.mul(prices[i])).reduce((a, b) => a.add(b));
 
-    // {USD} += {tok} * {USD/wholeTok} / {tok/wholeTok}
-    totalValue = totalValue.add(new Decimal(_bals[i].toString()).mul(prices[i]).div(decimalScale[i]));
-  }
+  // compute $ value of one basket unit
+  // {USD/BU} = {wholeTok/BU} * {USD/wholeTok}
+  const basketValue = spotWeights.map((weight, i) => weight.mul(prices[i])).reduce((a, b) => a.add(b));
 
-  return totalValue.sub(surplusValue).div(totalValue).toNumber();
+  // compute number of basket units
+  // {BU} = {USD} / {USD/BU}
+  const baskets = allValue.div(basketValue);
+
+  // compute expected balances
+  // {wholeTok} = {wholeTok/BU} * {BU}
+  const expectedBalances = spotWeights.map((weight) => weight.mul(baskets));
+
+  // compute value NOT in correct balances
+  // {USD} = {wholeTok} * {USD/wholeTok}
+  const errorValue = bals.map((bal, i) => bal.sub(expectedBalances[i]).abs().mul(prices[i])).reduce((a, b) => a.add(b));
+
+  return allValue.sub(errorValue).div(allValue).toNumber();
 };
