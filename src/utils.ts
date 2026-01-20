@@ -15,6 +15,10 @@ export const Decimal = DecimalLight.clone({ precision: 100 });
  * @returns D18{1} Current basket, total will be around 1e18 but not exactly
  */
 export const getBasketDistribution = (_bals: bigint[], _prices: number[], decimals: bigint[]): bigint[] => {
+  if (_bals.length !== _prices.length || _bals.length !== decimals.length) {
+    throw new Error("getBasketDistribution: length mismatch");
+  }
+
   const decimalScale = decimals.map((d) => new Decimal(`1e${d}`));
 
   // {wholeTok} = {tok} / {tok/wholeTok}
@@ -45,6 +49,10 @@ export const getBasketAccuracy = (
   _decimals: bigint[],
   _weights: WeightRange[],
 ): number => {
+  if (_bals.length !== _prices.length || _bals.length !== _decimals.length || _bals.length !== _weights.length) {
+    throw new Error("getBasketAccuracy: length mismatch");
+  }
+
   const decimalScale = _decimals.map((d) => new Decimal(`1e${d}`));
 
   // {USD/wholeTok} = {USD/wholeTok}

@@ -51,6 +51,17 @@ export const getStartRebalance = (
     );
   }
 
+  if (
+    tokens.length != _assets.length ||
+    _assets.length != decimals.length ||
+    decimals.length != _targetBasket.length ||
+    _targetBasket.length != _prices.length ||
+    _prices.length != _priceError.length ||
+    _priceError.length != _maxAuctionSizes.length
+  ) {
+    throw new Error("getStartRebalance: length mismatch");
+  }
+
   if (deferWeights && !weightControl) {
     throw new Error("deferWeights is not supported for tracking DTFs");
   }

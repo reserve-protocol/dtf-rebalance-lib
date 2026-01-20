@@ -59,13 +59,14 @@ export const getOpenAuction = (
   }
 
   if (
-    rebalance.tokens.length != _targetBasket.length ||
+    rebalance.tokens.length != _initialAssets.length ||
+    _initialAssets.length != _targetBasket.length ||
     _targetBasket.length != _assets.length ||
     _assets.length != _decimals.length ||
     _decimals.length != _prices.length ||
     _prices.length != _priceError.length
   ) {
-    throw new Error("length mismatch");
+    throw new Error("getOpenAuction: length mismatch");
   }
 
   if (_finalStageAt > 1) {
