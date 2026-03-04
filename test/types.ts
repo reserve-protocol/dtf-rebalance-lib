@@ -10,6 +10,7 @@ export interface FolioConfig {
   folio: string;
   proxyAdmin: string;
   basketGovernor?: string;
+  nonBasketGovernor?: string;
 }
 
 export interface RebalanceContracts {

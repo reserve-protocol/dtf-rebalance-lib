@@ -5,7 +5,7 @@ import { expect } from "chai";
 import { Contract } from "ethers";
 
 import { bn } from "../src/numbers";
-import { whileImpersonating, toPlainObject, createPriceLookup, logPercentages } from "./utils";
+import { whileImpersonating, toPlainObject, createPriceLookup, logPercentages, mockBasketTokens } from "./utils";
 import { AuctionMetrics, AuctionRound, FolioVersion, OpenAuctionArgs, WeightRange } from "../src/types";
 import { getOpenAuction, getTargetBasket } from "../src/open-auction";
 import { RebalanceContracts, RebalanceSigners } from "./types";
@@ -28,10 +28,6 @@ export async function doAuctions(
   auctionPriceDeviation: number = 0.02,
   swapSlippageRange: [number, number] = [0.001, 0.005], // 0.1% to 0.5% default slippage
 ) {
-  if (version !== FolioVersion.V4) {
-    throw new Error(`only version 4.0.0 implemented for now`);
-  }
-
   const { folio, folioLensTyped } = contracts;
   const { bidder, auctionLauncher } = signers;
 
@@ -83,33 +79,7 @@ export async function doAuctions(
   }
 
   // Replace tokens with mocks
-  const ERC20MockFactory = await hre.ethers.getContractFactory("ERC20Mock");
-  const mockedTokensRec: Record<string, Contract> = {};
-
-  for (const asset of orderedTokens) {
-    const tokenContract = (await hre.ethers.getContractAt("ERC20Mock", asset)) as unknown as Contract;
-    const balBefore = await tokenContract.balanceOf(await folio.getAddress());
-
-    const currentCode = await hre.ethers.provider.getCode(asset);
-    const newMockDeployment = await ERC20MockFactory.deploy();
-    await newMockDeployment.waitForDeployment();
-    const newImplementationBytecode = await hre.ethers.provider.getCode(await newMockDeployment.getAddress());
-
-    if (newImplementationBytecode !== currentCode) {
-      const tokenContract2 = await hre.ethers.getContractAt("IERC20Metadata", asset);
-      const [name, symbol, tokenDecimalsValue] = await Promise.all([
-        tokenContract2.name(),
-        tokenContract2.symbol(),
-        tokenContract2.decimals(),
-      ]);
-      await hre.network.provider.send("hardhat_setCode", [asset, newImplementationBytecode]);
-      await (await tokenContract.init(name, symbol, tokenDecimalsValue)).wait();
-      await (await tokenContract.mint(await folio.getAddress(), balBefore)).wait();
-    }
-
-    expect(await tokenContract.balanceOf(await folio.getAddress())).to.equal(balBefore);
-    mockedTokensRec[asset] = tokenContract;
-  }
+  const mockedTokensRec = await mockBasketTokens(hre, await folio.getAddress(), orderedTokens);
 
   // function definitions
 
@@ -128,7 +98,17 @@ export async function doAuctions(
 
   const doAuction = async (auctionNumber: number): Promise<[OpenAuctionArgs, AuctionMetrics]> => {
     // can have fewer tokens than orderedTokens, because some have been successfully ejected
-    const rebalanceState: Rebalance_4_0_0 | Rebalance_5_0_0 = await folio.getRebalance();
+    let rebalanceState: Rebalance_4_0_0 | Rebalance_5_0_0;
+    if (version === FolioVersion.V4) {
+      // V4 getRebalance returns a different struct than V5; use inline ABI since out/ artifacts are V5
+      const v4Iface = new hre.ethers.Interface([
+        "function getRebalance() view returns (uint256 nonce, address[] tokens, (uint256 low, uint256 spot, uint256 high)[] weights, (uint256 low, uint256 high)[] initialPrices, bool[] inRebalance, (uint256 low, uint256 spot, uint256 high) limits, uint256 startedAt, uint256 restrictedUntil, uint256 availableUntil, uint8 priceControl)",
+      ]);
+      const v4Folio = new hre.ethers.Contract(await folio.getAddress(), v4Iface, hre.ethers.provider);
+      rebalanceState = await v4Folio.getRebalance();
+    } else {
+      rebalanceState = await folio.getRebalance();
+    }
     const rebalanceState4_0_0 = rebalanceState as Rebalance_4_0_0;
     const rebalanceState5_0_0 = rebalanceState as Rebalance_5_0_0;
 

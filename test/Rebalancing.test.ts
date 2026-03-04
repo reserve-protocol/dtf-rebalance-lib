@@ -9,11 +9,9 @@ import { startRebalance } from "./start-rebalance";
 import { doAuctions } from "./do-auctions";
 import { getAssetPrices, getTokenNameAndSymbol, normalizePrices } from "./utils";
 
-import { FOLIO_CONFIGS, CHAIN_BLOCK_NUMBERS } from "./4.0.0/config";
-// TODO test V5
+import { FOLIO_CONFIGS, CHAIN_BLOCK_NUMBERS } from "./5.0.0/config";
 
-// Only test BGCI for now
-const TEST_FOLIO_CONFIGS = FOLIO_CONFIGS.filter((f) => f.name === "BGCI");
+const TEST_FOLIO_CONFIGS = FOLIO_CONFIGS.filter((f) => f.name === "BED");
 
 for (const folioConfig of TEST_FOLIO_CONFIGS) {
   describe(folioConfig.name, function () {
@@ -28,6 +26,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
     }
 
     it("Basic ejection", async function () {
+      this.timeout(300000);
       const { admin, folio, folioLensTyped, bidder, rebalanceManager, auctionLauncher } =
         await loadFixture(deployFixture);
 
@@ -96,7 +95,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
 
       // Setup the rebalance
       await startRebalance(
-        FolioVersion.V4,
+        FolioVersion.V5,
         hre,
         { folio, folioLensTyped },
         { bidder, rebalanceManager, auctionLauncher, admin },
@@ -109,7 +108,7 @@ for (const folioConfig of TEST_FOLIO_CONFIGS) {
 
       // Execute the auctions
       await doAuctions(
-        FolioVersion.V4,
+        FolioVersion.V5,
         hre,
         { folio, folioLensTyped },
         { bidder, rebalanceManager, auctionLauncher, admin },

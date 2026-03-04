@@ -2,6 +2,7 @@ import "@nomicfoundation/hardhat-ethers";
 import { Contract } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
+import { expect } from "chai";
 
 import { bn } from "../src/numbers";
 
@@ -192,6 +193,106 @@ export async function whileImpersonating(
   }
 }
 
+export async function ensureProposalPasses(
+  hre: HardhatRuntimeEnvironment,
+  governor: Contract,
+  proposalId: string | bigint,
+): Promise<void> {
+  // Check proposal state — skip if already Succeeded/Queued/Executed
+  const state = Number(await governor.state(proposalId));
+  if (state === 4 || state === 5 || state === 7) return;
+
+  // Get governance token
+  const tokenAddress = await governor.token();
+  const tokenAbi = [
+    "function getVotes(address) view returns (uint256)",
+    "event DelegateVotesChanged(address indexed delegate, uint256 previousVotes, uint256 newVotes)",
+  ];
+  const token = new hre.ethers.Contract(tokenAddress, tokenAbi, hre.ethers.provider);
+
+  // Get quorum requirement
+  const snapshot = await governor.proposalSnapshot(proposalId);
+  const quorum = await governor.quorum(snapshot);
+
+  // Check existing votes
+  const [, forVotes] = await governor.proposalVotes(proposalId);
+  if (forVotes >= quorum) return;
+
+  let accumulated = forVotes;
+
+  // Helper to cast a vote for a delegate
+  const tryCastVote = async (delegate: string): Promise<bigint> => {
+    const hasVoted = await governor.hasVoted(proposalId, delegate);
+    if (hasVoted) return 0n;
+
+    const votingPower = await governor.getVotes(delegate, snapshot);
+    if (votingPower === 0n) return 0n;
+
+    await whileImpersonating(hre, delegate, async (signer) => {
+      await (await (governor.connect(signer) as any).castVote(proposalId, 1)).wait();
+    });
+    return votingPower;
+  };
+
+  // Strategy 1: Try the proposer first — they must have had enough tokens to propose
+  try {
+    const proposer = await governor.proposalProposer(proposalId);
+    accumulated += await tryCastVote(proposer);
+    if (accumulated >= quorum) return;
+  } catch {
+    // proposalProposer may not exist on older governors
+  }
+
+  // Strategy 2: Find delegates via DelegateVotesChanged events
+  const filter = token.filters.DelegateVotesChanged();
+  const currentBlock = await hre.ethers.provider.getBlockNumber();
+  let events: any[] = [];
+  for (let i = 0; i < 100; i++) {
+    const toBlock = currentBlock - 9999 * i;
+    const fromBlock = Math.max(0, currentBlock - 9999 * (i + 1));
+
+    try {
+      const batch = await token.queryFilter(filter, fromBlock, toBlock);
+      events.push(...batch);
+    } catch {
+      // BSC fallback: smaller batches of 999 blocks
+      for (let j = 0; j < 10; j++) {
+        const bscFrom = fromBlock + 999 * j;
+        const bscTo = Math.min(fromBlock + 999 * (j + 1), toBlock);
+        if (bscFrom > toBlock) break;
+
+        const batch = await token.queryFilter(filter, bscFrom, bscTo);
+        events.push(...batch);
+      }
+    }
+  }
+
+  // Build map: delegate → latest newVotes
+  const delegateVotes = new Map<string, bigint>();
+  for (const e of events) {
+    if ("args" in e && e.args) {
+      const delegate = e.args.delegate as string;
+      const newVotes = BigInt(e.args.newVotes.toString());
+      delegateVotes.set(delegate, newVotes);
+    }
+  }
+
+  // Sort descending by votes, filter > 0
+  const sortedDelegates = [...delegateVotes.entries()]
+    .filter(([, votes]) => votes > 0n)
+    .sort(([, a], [, b]) => (b > a ? 1 : b < a ? -1 : 0));
+
+  // Cast votes from top delegates
+  for (const [delegate] of sortedDelegates) {
+    if (accumulated >= quorum) break;
+    accumulated += await tryCastVote(delegate);
+  }
+
+  if (accumulated < quorum) {
+    throw new Error(`Could not accumulate enough votes to pass proposal. Got ${accumulated}, need ${quorum}`);
+  }
+}
+
 export async function getTokenNameAndSymbol(hre: HardhatRuntimeEnvironment, token: string) {
   try {
     const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
@@ -200,6 +301,47 @@ export async function getTokenNameAndSymbol(hre: HardhatRuntimeEnvironment, toke
   } catch (e) {
     return token;
   }
+}
+
+/**
+ * Replace real ERC20 tokens with ERC20Mock at the same addresses.
+ * Idempotent — if bytecodes already match, the token is skipped.
+ * Preserves name, symbol, decimals, and folio balances.
+ */
+export async function mockBasketTokens(
+  hre: HardhatRuntimeEnvironment,
+  folioAddress: string,
+  tokens: string[],
+): Promise<Record<string, Contract>> {
+  const ERC20MockFactory = await hre.ethers.getContractFactory("ERC20Mock");
+  const mockedTokensRec: Record<string, Contract> = {};
+
+  for (const asset of tokens) {
+    const tokenContract = (await hre.ethers.getContractAt("ERC20Mock", asset)) as unknown as Contract;
+    const balBefore = await tokenContract.balanceOf(folioAddress);
+
+    const currentCode = await hre.ethers.provider.getCode(asset);
+    const newMockDeployment = await ERC20MockFactory.deploy();
+    await newMockDeployment.waitForDeployment();
+    const newImplementationBytecode = await hre.ethers.provider.getCode(await newMockDeployment.getAddress());
+
+    if (newImplementationBytecode !== currentCode) {
+      const tokenContract2 = await hre.ethers.getContractAt("IERC20Metadata", asset);
+      const [name, symbol, tokenDecimalsValue] = await Promise.all([
+        tokenContract2.name(),
+        tokenContract2.symbol(),
+        tokenContract2.decimals(),
+      ]);
+      await hre.network.provider.send("hardhat_setCode", [asset, newImplementationBytecode]);
+      await (await tokenContract.init(name, symbol, tokenDecimalsValue)).wait();
+      await (await tokenContract.mint(folioAddress, balBefore)).wait();
+    }
+
+    expect(await tokenContract.balanceOf(folioAddress)).to.equal(balBefore);
+    mockedTokensRec[asset] = tokenContract;
+  }
+
+  return mockedTokensRec;
 }
 
 export async function calculateRebalanceMetrics(

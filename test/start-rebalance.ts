@@ -97,8 +97,13 @@ export async function startRebalance(
   // start rebalance
   await whileImpersonating(hre, await rebalanceManager.getAddress(), async (signer) => {
     if (version === FolioVersion.V4) {
+      // V4 has a different startRebalance signature than V5; use inline ABI since out/ artifacts are V5
+      const v4Iface = new hre.ethers.Interface([
+        "function startRebalance(address[] tokens, (uint256 low, uint256 spot, uint256 high)[] weights, (uint256 low, uint256 high)[] prices, (uint256 low, uint256 spot, uint256 high) limits, uint256 auctionLauncherWindow, uint256 ttl)",
+      ]);
+      const v4Folio = new hre.ethers.Contract(await folio.getAddress(), v4Iface, signer);
       await (
-        await (folio.connect(signer) as any).startRebalance(
+        await v4Folio.startRebalance(
           (startRebalanceArgs as StartRebalanceArgsPartial_4_0_0).tokens,
           (startRebalanceArgs as StartRebalanceArgsPartial_4_0_0).weights,
           (startRebalanceArgs as StartRebalanceArgsPartial_4_0_0).prices,
