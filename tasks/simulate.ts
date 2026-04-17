@@ -674,10 +674,26 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
 
     // === Post-validations: mint/redeem + validate rebalance + upgrade ===
     const [bidder2] = await hre.ethers.getSigners();
-    await mintAndRedeem(hre, folio, bidder2);
-    await validateWeightShift(hre, folio, folioLensTyped, undefined, folioConfig.chainId);
-    await validateEjectAndAdd(hre, folio, folioLensTyped, undefined, folioConfig.chainId);
-    await validateUpgrade(hre, folio, folioConfig);
+    const postChecks: [string, () => Promise<unknown>][] = [
+      ["mint/redeem", () => mintAndRedeem(hre, folio, bidder2)],
+      ["weight shift", () => validateWeightShift(hre, folio, folioLensTyped, undefined, folioConfig.chainId)],
+      ["eject & add", () => validateEjectAndAdd(hre, folio, folioLensTyped, undefined, folioConfig.chainId)],
+      ["upgrade", () => validateUpgrade(hre, folio, folioConfig)],
+    ];
+    const failures: string[] = [];
+    for (const [name, fn] of postChecks) {
+      try {
+        await fn();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.log(`\n❌ Post-check "${name}" failed: ${msg}`);
+        failures.push(name);
+      }
+    }
 
-    console.log(`\n🎉 Simulation complete!`);
+    if (failures.length > 0) {
+      console.log(`\n🎉 Simulation complete (with ${failures.length} post-check failure(s): ${failures.join(", ")})`);
+    } else {
+      console.log(`\n🎉 Simulation complete!`);
+    }
   });

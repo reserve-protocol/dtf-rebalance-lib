@@ -27,6 +27,7 @@ export async function doAuctions(
   debug?: boolean,
   auctionPriceDeviation: number = 0.02,
   swapSlippageRange: [number, number] = [0.001, 0.005], // 0.1% to 0.5% default slippage
+  tolerance: number = 1e-5,
 ) {
   const { folio, folioLensTyped } = contracts;
   const { bidder, auctionLauncher } = signers;
@@ -319,24 +320,22 @@ export async function doAuctions(
   // ROUND 1
   let [openAuctionArgsLocal, auctionMetrics] = await doAuction(1);
 
-  const TOLERANCE = 1e-5;
-
   // ROUND 2
-  if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - TOLERANCE) {
+  if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - tolerance) {
     [openAuctionArgsLocal, auctionMetrics] = await doAuction(2);
   }
 
   // ROUND 3
-  if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - TOLERANCE) {
+  if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - tolerance) {
     [openAuctionArgsLocal, auctionMetrics] = await doAuction(3);
   }
 
-  if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - TOLERANCE) {
+  if (auctionMetrics.round == AuctionRound.EJECT || auctionMetrics.target < 1 - tolerance) {
     console.log("openAuctionArgsLocal", openAuctionArgsLocal);
     console.log("auctionMetrics", auctionMetrics);
     throw new Error("did not finish rebalancing after 3 auctions");
   }
-  expect(auctionMetrics.target).to.be.closeTo(1, TOLERANCE);
+  expect(auctionMetrics.target).to.be.closeTo(1, tolerance);
 
   // Verify all tokens with weight 0 have been fully ejected
   for (const token of orderedTokens) {

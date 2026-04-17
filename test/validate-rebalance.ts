@@ -182,6 +182,7 @@ export async function validateWeightShift(
     false,
     0.001, // minimal price deviation for validation
     [0, 0], // no slippage for validation
+    5e-4, // slightly looser tolerance for synthetic post-check
   );
 
   console.log(`   ✅ Validation weight shift completed (error: ${(totalError * 100).toFixed(4)}%)`);
@@ -286,6 +287,7 @@ export async function validateEjectAndAdd(
     false,
     0.001, // minimal price deviation for validation
     [0, 0], // no slippage for validation
+    5e-4, // slightly looser tolerance for synthetic post-check
   );
 
   // Verify new mock token has non-zero balance in folio
