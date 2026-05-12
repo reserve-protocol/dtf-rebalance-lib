@@ -7,6 +7,9 @@ import { getTargetBasket } from "../src/open-auction";
 
 import { initializeChainState, setupContractsAndSigners } from "../test/setup";
 import { doAuctions } from "../test/do-auctions";
+import { mintAndRedeem } from "../test/mint-redeem";
+import { validateWeightShift, validateEjectAndAdd } from "../test/validate-rebalance";
+import { validateUpgrade } from "../test/validate-upgrade";
 import {
   calculateRebalanceMetrics,
   logPercentages,
@@ -14,13 +17,13 @@ import {
   simulateMarketPrices,
   createPriceLookup,
   whileImpersonating,
+  ensureProposalPasses,
+  mockBasketTokens,
 } from "../test/utils";
 
-import { FOLIO_CONFIGS } from "../test/4.0.0/config";
+import { FOLIO_CONFIGS } from "../test/5.0.0/config";
 
 import FolioGovernorArtifact from "../out/FolioGovernor.sol/FolioGovernor.json";
-
-// TODO this probably doesn't work for V5 Folios yet
 
 task("simulate", "Run a live rebalance simulation for a governance proposal")
   .addParam("id", "The governance proposal ID")
@@ -55,13 +58,8 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       throw new Error(`Folio configuration not found for symbol: ${symbol}`);
     }
 
-    if (!folioConfig.basketGovernor) {
-      throw new Error(`basketGovernor address not configured for ${symbol}`);
-    }
-
-    console.log(`\n🚀 Starting live rebalance simulation for ${folioConfig.name}...`);
+    console.log(`\n🚀 Starting live simulation for ${folioConfig.name}...`);
     console.log(`📋 Proposal ID: ${id}`);
-    console.log(`🏛️  Governor: ${folioConfig.basketGovernor}`);
     console.log(`📈 Market Volatility: ${(marketVolatility * 100).toFixed(0)}% annual`);
     console.log(`🔢 Fork Block: ${blockNumber ? blockNumber : "latest"}`);
 
@@ -73,7 +71,8 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       hre,
       folioConfig,
     );
-    // Check folio version compatibility
+
+    // Check folio version
     let folioVersion: string;
     try {
       folioVersion = await folio.version();
@@ -81,35 +80,54 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       throw new Error(`Failed to get folio version: ${error}. The folio contract may not be properly initialized.`);
     }
 
-    if (folioVersion[0] !== "4") {
-      throw new Error(`Unsupported folio version: ${folioVersion}. This simulation requires version 4.0.0.`);
-    }
+    console.log(`📦 Folio version: ${folioVersion}`);
 
-    // Get governor contract
+    // Auto-detect governor: try basketGovernor first, fall back to nonBasketGovernor
     const governorAbi = [
       ...FolioGovernorArtifact.abi,
       "function queue(address[] targets, uint256[] values, bytes[] calldatas, bytes32 descriptionHash) returns (uint256)",
       "function execute(address[] targets, uint256[] values, bytes[] calldatas, bytes32 descriptionHash) payable returns (uint256)",
     ];
-    const governor = await hre.ethers.getContractAt(governorAbi, folioConfig.basketGovernor);
+
+    let governor;
+    let governorAddress: string | undefined;
+
+    // Try basketGovernor first
+    if (folioConfig.basketGovernor) {
+      try {
+        const candidateGovernor = await hre.ethers.getContractAt(governorAbi, folioConfig.basketGovernor);
+        await candidateGovernor.state(id);
+        governor = candidateGovernor;
+        governorAddress = folioConfig.basketGovernor;
+        console.log(`🏛️  Governor: ${governorAddress} (basket)`);
+      } catch {
+        // Proposal not found on basketGovernor, try nonBasketGovernor
+      }
+    }
+
+    // Fall back to nonBasketGovernor
+    if (!governor && folioConfig.nonBasketGovernor) {
+      try {
+        const candidateGovernor = await hre.ethers.getContractAt(governorAbi, folioConfig.nonBasketGovernor);
+        await candidateGovernor.state(id);
+        governor = candidateGovernor;
+        governorAddress = folioConfig.nonBasketGovernor;
+        console.log(`🏛️  Governor: ${governorAddress} (non-basket)`);
+      } catch {
+        // Proposal not found on nonBasketGovernor either
+      }
+    }
+
+    if (!governor || !governorAddress) {
+      throw new Error(
+        `Proposal ${id} not found on any governor.\n` +
+          `Tried basketGovernor: ${folioConfig.basketGovernor || "not configured"}\n` +
+          `Tried nonBasketGovernor: ${folioConfig.nonBasketGovernor || "not configured"}`,
+      );
+    }
 
     // Get proposal state
-    let proposalState;
-    try {
-      proposalState = Number(await governor.state(id)); // Convert to number for comparison
-    } catch (error: any) {
-      // Check if the error is due to a non-existent proposal
-      if (error.message?.includes("reverted") || error.message?.includes("VM Exception")) {
-        throw new Error(
-          `Proposal ${id} does not exist at block ${blockNumber || "latest"}.\n` +
-            `This could mean:\n` +
-            `  - The proposal ID is incorrect\n` +
-            `  - The proposal was created after block ${blockNumber || "latest"}\n` +
-            `  - You're using the wrong governor address for this proposal`,
-        );
-      }
-      throw new Error(`Failed to get proposal state: ${error}`);
-    }
+    const proposalState = Number(await governor.state(id));
     const PROPOSAL_STATES = ["Pending", "Active", "Canceled", "Defeated", "Succeeded", "Queued", "Expired", "Executed"];
     console.log(`📊 Proposal State: ${PROPOSAL_STATES[proposalState]} (${proposalState})`);
 
@@ -160,19 +178,17 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
 
     console.log(`✅ Found ProposalCreated event for proposal ${id}`);
 
-    // Extract the calldata from the event
-    if (!("args" in event) || !event.args?.calldatas || event.args.calldatas.length === 0) {
-      throw new Error(
-        `Proposal ${id} does not contain any actions.\n` + `Expected a startRebalance action in the proposal.`,
-      );
-    }
-
     // Convert Result objects to plain arrays to avoid ethers v6 read-only issues
     // In ethers v6, event args are Result objects with array-like behavior
-    const targets = event.args.targets as string[];
-    const calldatas = event.args.calldatas as string[];
-    // Handle values carefully - they should be numeric values for the proposal
-    const rawValues = event.args.values;
+    const eventArgs = (event as any).args;
+    if (!eventArgs?.calldatas || eventArgs.calldatas.length === 0) {
+      throw new Error(`Proposal ${id} does not contain any actions.`);
+    }
+
+    const targets = eventArgs.targets as string[];
+    const calldatas = eventArgs.calldatas as string[];
+    // Access values by index — eventArgs.values collides with Array.prototype.values in ethers v6
+    const rawValues = eventArgs[3];
     const values = Array.isArray(rawValues)
       ? rawValues.map((v: any) => {
           // Skip if it's not a valid value that can be converted to BigInt
@@ -184,433 +200,360 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
         })
       : [0n]; // Default to single zero value if not an array
 
-    // Get the first action's calldata (should be the startRebalance call)
     const calldata = calldatas[0];
     console.log(`   Found ${calldatas.length} action(s) in proposal`);
 
-    // Validate that the target contract is the folio
-    if (targets[0] && targets[0].toLowerCase() !== folioConfig.folio.toLowerCase()) {
-      throw new Error(
-        `Proposal ${id} does not target the expected folio contract.\n` +
-          `Expected: ${folioConfig.folio}\n` +
-          `Found: ${targets[0]}\n` +
-          `This proposal may be for a different folio or contract.`,
-      );
-    }
-
-    // Decode the calldata to extract startRebalance parameters
-    const iface = new hre.ethers.Interface([
-      "function startRebalance(address[],(uint256,uint256,uint256)[],(uint256,uint256)[],(uint256,uint256,uint256),uint256,uint256)",
+    // Detect if this is a V5 startRebalance proposal
+    // V5 startRebalance: (TokenRebalanceParams[], RebalanceLimits, uint256, uint256)
+    const ifaceV5 = new hre.ethers.Interface([
+      "function startRebalance((address token, (uint256 low, uint256 spot, uint256 high) weight, (uint256 low, uint256 high) price, uint256 maxAuctionSize, bool inRebalance)[] tokens, (uint256 low, uint256 spot, uint256 high) limits, uint256 auctionLauncherWindow, uint256 ttl)",
     ]);
 
-    // Validate it's a startRebalance call
-    let functionName: string;
-    try {
-      const parsed = iface.parseTransaction({ data: calldata as string });
-      functionName = parsed?.name || "";
-    } catch {
-      functionName = "";
+    let isRebalanceProposal = false;
+    const parsedV5 = ifaceV5.parseTransaction({ data: calldata as string });
+    if (parsedV5 !== null && parsedV5.name === "startRebalance") {
+      isRebalanceProposal = true;
     }
 
-    if (functionName !== "startRebalance") {
-      throw new Error(
-        `Proposal ${id} does not contain a startRebalance action.\n` +
-          `Found function: ${functionName || "unknown"}\n` +
-          `This simulation requires a proposal that calls startRebalance on the folio contract.`,
-      );
-    }
+    console.log(`   ${isRebalanceProposal ? "🔄 Rebalance proposal detected" : "📋 Non-rebalance proposal"}`);
 
-    let proposalTokens: string[];
-    let proposalWeights: bigint[];
-    let proposalPrices: { low: bigint; high: bigint }[];
-    let decoded: any; // Store decoded data for later use
+    // === Variables shared between pre-execution and post-execution rebalance blocks ===
+    let decoded: any;
+    let allTokens: string[] = [];
+    let baselinePriceRec: Record<string, { snapshotPrice: number }> = {};
+    let auctionPriceRec: Record<string, { snapshotPrice: number }> = {};
+    let targetBasketRec: Record<string, bigint> = {};
+    let normalizedTargetBasketRec: Record<string, bigint> = {};
+    let governanceDelayDays: number = 0;
 
-    try {
-      decoded = iface.decodeFunctionData("startRebalance", calldata as string);
-      // Convert Result objects to plain arrays
-      proposalTokens = decoded[0] as string[];
-      // WeightRange is a tuple of [low, spot, high], get spot weight (index 1)
-      // These weights are in D27{tok/BU} format - tokens per basket unit with 27 decimals
-      // They represent absolute amounts, NOT percentages
-      proposalWeights = (decoded[1] as any[]).map((w: any) => {
-        // ethers v6 returns Result objects which need conversion
-        return BigInt(w[1].toString()); // spot weight is at index 1
-      });
+    // === Pre-execution: decode and display rebalance data ===
+    if (isRebalanceProposal) {
+      // Validate that the target contract is the folio
+      if (targets[0] && targets[0].toLowerCase() !== folioConfig.folio.toLowerCase()) {
+        throw new Error(
+          `Proposal ${id} does not target the expected folio contract.\n` +
+            `Expected: ${folioConfig.folio}\n` +
+            `Found: ${targets[0]}`,
+        );
+      }
 
-      // Extract historical prices from proposal
-      // PriceRange is a tuple of [low, high] in D27{nanoUSD/tok} format
-      proposalPrices = (decoded[2] as any[]).map((p: any) => {
-        return {
-          low: BigInt(p[0].toString()),
-          high: BigInt(p[1].toString()),
-        };
-      });
-
-      console.log(`📊 Proposal contains ${proposalTokens.length} tokens`);
-    } catch (error) {
-      throw new Error(
-        `Could not decode proposal calldata.\n` +
-          `The proposal may not contain a valid startRebalance action.\n` +
-          `Error: ${error}`,
-      );
-    }
-
-    // Get current basket
-    const [currentTokens, currentAmounts] = await folio.totalAssets();
-    console.log(`\n📦 Current basket has ${currentTokens.length} tokens`);
-
-    // Get unique set of all tokens (current + proposal)
-    const allTokensSet = new Set([...currentTokens, ...proposalTokens]);
-    const allTokens = Array.from(allTokensSet);
-    console.log(`📊 Total unique tokens across current and proposal: ${allTokens.length}`);
-
-    // Calculate current values and get decimals for all tokens
-    const decimalsRec: Record<string, bigint> = {};
-    const currentAmountsRec: Record<string, bigint> = {};
-
-    // Get decimals for all tokens (current + proposal)
-    for (const token of allTokens) {
-      const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
-      decimalsRec[token] = await tokenContract.decimals();
-    }
-
-    // Calculate real governance delay
-    const currentTime = await time.latest();
-    console.log(`   Current time: ${currentTime}`);
-    let governanceDelayDays: number;
-
-    // Check if proposal needs queuing (has a timelock)
-    const needsQueuing = await governor.proposalNeedsQueuing(id);
-
-    // Get proposal timing information
-    const proposalDeadline = await governor.proposalDeadline(id);
-
-    // Get timelock delay if proposal needs queuing
-    let timelockDelaySeconds = 0;
-    if (needsQueuing) {
-      // Get the timelock controller address from governor
-      const timelockAddress = await governor.timelock();
-
-      // Create timelock controller interface to query minimum delay
-      const timelockAbi = [
-        "function getMinDelay() view returns (uint256)",
-        "function minDelay() view returns (uint256)",
-      ];
-      const timelock = new hre.ethers.Contract(timelockAddress, timelockAbi, hre.ethers.provider);
-
-      // Try to fetch the minimum delay
       try {
-        timelockDelaySeconds = Number(await timelock.getMinDelay());
-      } catch {
-        try {
-          timelockDelaySeconds = Number(await timelock.minDelay());
-        } catch (error) {
-          throw new Error(`Could not fetch minimum delay from timelock at ${timelockAddress}: ${error}`);
+        decoded = ifaceV5.decodeFunctionData("startRebalance", calldata as string);
+
+        // V5 decoded[0] is TokenRebalanceParams[]
+        const tokenParams = decoded[0] as any[];
+        const proposalTokens = tokenParams.map((p: any) => p.token as string);
+        const proposalWeights = tokenParams.map((p: any) => BigInt(p.weight[1].toString())); // spot weight
+        const proposalPrices = tokenParams.map((p: any) => ({
+          low: BigInt(p.price[0].toString()),
+          high: BigInt(p.price[1].toString()),
+        }));
+
+        console.log(`📊 Proposal contains ${proposalTokens.length} tokens`);
+
+        // Get current basket
+        const [currentTokens, currentAmounts] = await folio.totalAssets();
+        console.log(`📦 Current basket has ${currentTokens.length} tokens`);
+
+        // Get unique set of all tokens
+        const allTokensSet = new Set([...currentTokens, ...proposalTokens]);
+        allTokens = Array.from(allTokensSet);
+        console.log(`📊 Total unique tokens across current and proposal: ${allTokens.length}`);
+
+        // Get decimals for all tokens
+        const decimalsRec: Record<string, bigint> = {};
+        const currentAmountsRec: Record<string, bigint> = {};
+
+        for (const token of allTokens) {
+          const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
+          decimalsRec[token] = await tokenContract.decimals();
         }
-      }
-    }
 
-    if (proposalState === 0) {
-      // Pending state
-      // Proposal hasn't started voting yet
-      // Get voting delay and voting period to calculate full timeline
-      const votingDelay = await governor.votingDelay();
-      const votingPeriod = await governor.votingPeriod();
-      const totalSeconds = Number(votingDelay) + Number(votingPeriod) + timelockDelaySeconds;
-      governanceDelayDays = totalSeconds / (24 * 60 * 60);
-      console.log(
-        `\n⏰ Governance Delay: ${governanceDelayDays.toFixed(2)} days (Proposal pending: ${(Number(votingDelay) / (24 * 60 * 60)).toFixed(2)} days delay + ${(Number(votingPeriod) / (24 * 60 * 60)).toFixed(2)} days voting + ${(timelockDelaySeconds / (24 * 60 * 60)).toFixed(2)} days timelock)`,
-      );
-    } else if (proposalState === 1) {
-      // Active state
-      // Calculate remaining voting time + timelock delay
-      const remainingVotingSeconds = Math.max(0, Number(proposalDeadline) - currentTime);
-      const totalRemainingSeconds = remainingVotingSeconds + timelockDelaySeconds;
-      governanceDelayDays = totalRemainingSeconds / (24 * 60 * 60);
-      console.log(
-        `\n⏰ Governance Delay: ${governanceDelayDays.toFixed(2)} days (${(remainingVotingSeconds / (24 * 60 * 60)).toFixed(2)} days voting + ${(timelockDelaySeconds / (24 * 60 * 60)).toFixed(2)} days timelock)`,
-      );
-    } else if (proposalState === 4) {
-      // Succeeded state
-      // Voting has ended, only timelock delay remains
-      governanceDelayDays = timelockDelaySeconds / (24 * 60 * 60);
-      console.log(
-        `\n⏰ Governance Delay: ${governanceDelayDays.toFixed(2)} days (Voting ended, ${(timelockDelaySeconds / (24 * 60 * 60)).toFixed(2)} days timelock pending)`,
-      );
-    } else if (proposalState === 5) {
-      // Queued state
-      // Proposal is queued, use ETA to calculate remaining time
-      const proposalEta = await governor.proposalEta(id);
-      const remainingSeconds = Math.max(0, Number(proposalEta) - currentTime);
-      governanceDelayDays = remainingSeconds / (24 * 60 * 60);
-      console.log(
-        `\n⏰ Governance Delay: ${governanceDelayDays.toFixed(2)} days (Proposal is queued, ETA: ${new Date(Number(proposalEta) * 1000).toISOString()})`,
-      );
-    } else if (proposalState === 7) {
-      // Executed state
-      // Proposal has been executed, no delay
-      governanceDelayDays = 0;
-      console.log(`\n⏰ Governance Delay: 0 days (Proposal already executed)`);
-    } else if (proposalState === 2 || proposalState === 3 || proposalState === 6) {
-      // For Canceled (2), Defeated (3), or Expired (6) states - these proposals won't be executed
-      throw new Error(
-        `Cannot simulate rebalance for proposal in ${PROPOSAL_STATES[proposalState]} state.\n` +
-          `Only proposals that are Pending, Active, Succeeded, Queued, or Executed can be simulated.`,
-      );
-    } else {
-      // Unknown state
-      throw new Error(
-        `Unknown proposal state: ${proposalState}.\n` +
-          `Expected one of: Pending (0), Active (1), Canceled (2), Defeated (3), Succeeded (4), Queued (5), Expired (6), Executed (7).`,
-      );
-    }
+        // Calculate governance delay
+        const currentTime = await time.latest();
+        const needsQueuing = await governor.proposalNeedsQueuing(id);
+        const proposalDeadline = await governor.proposalDeadline(id);
 
-    // Get decimals array for proposal tokens (needed for price conversion)
-    const proposalDecimals = proposalTokens.map((token) => decimalsRec[token]);
+        let timelockDelaySeconds = 0;
+        if (needsQueuing) {
+          const timelockAddress = await governor.timelock();
+          const timelockAbi = [
+            "function getMinDelay() view returns (uint256)",
+            "function minDelay() view returns (uint256)",
+          ];
+          const timelock = new hre.ethers.Contract(timelockAddress, timelockAbi, hre.ethers.provider);
+          try {
+            timelockDelaySeconds = Number(await timelock.getMinDelay());
+          } catch {
+            try {
+              timelockDelaySeconds = Number(await timelock.minDelay());
+            } catch (error) {
+              throw new Error(`Could not fetch minimum delay from timelock at ${timelockAddress}: ${error}`);
+            }
+          }
+        }
 
-    // Get symbols for proposal tokens for better error messages
-    const proposalSymbols: string[] = [];
-    for (const token of proposalTokens) {
-      const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
-      const symbol = await tokenContract.symbol();
-      proposalSymbols.push(symbol);
-    }
+        if (proposalState === 0) {
+          const votingDelay = await governor.votingDelay();
+          const votingPeriod = await governor.votingPeriod();
+          const totalSeconds = Number(votingDelay) + Number(votingPeriod) + timelockDelaySeconds;
+          governanceDelayDays = totalSeconds / (24 * 60 * 60);
+          console.log(
+            `\n⏰ Governance Delay: ${governanceDelayDays.toFixed(2)} days (${(Number(votingDelay) / 86400).toFixed(2)}d delay + ${(Number(votingPeriod) / 86400).toFixed(2)}d voting + ${(timelockDelaySeconds / 86400).toFixed(2)}d timelock)`,
+          );
+        } else if (proposalState === 1) {
+          const remainingVotingSeconds = Math.max(0, Number(proposalDeadline) - currentTime);
+          const totalRemainingSeconds = remainingVotingSeconds + timelockDelaySeconds;
+          governanceDelayDays = totalRemainingSeconds / (24 * 60 * 60);
+          console.log(
+            `\n⏰ Governance Delay: ${governanceDelayDays.toFixed(2)} days (${(remainingVotingSeconds / 86400).toFixed(2)}d voting + ${(timelockDelaySeconds / 86400).toFixed(2)}d timelock)`,
+          );
+        } else if (proposalState === 4) {
+          governanceDelayDays = timelockDelaySeconds / (24 * 60 * 60);
+          console.log(`\n⏰ Governance Delay: ${governanceDelayDays.toFixed(2)} days (timelock only)`);
+        } else if (proposalState === 5) {
+          const proposalEta = await governor.proposalEta(id);
+          const remainingSeconds = Math.max(0, Number(proposalEta) - currentTime);
+          governanceDelayDays = remainingSeconds / (24 * 60 * 60);
+          console.log(`\n⏰ Governance Delay: ${governanceDelayDays.toFixed(2)} days (queued)`);
+        } else if (proposalState === 7) {
+          governanceDelayDays = 0;
+          console.log(`\n⏰ Governance Delay: 0 days (already executed)`);
+        } else if (proposalState === 2 || proposalState === 3 || proposalState === 6) {
+          throw new Error(
+            `Cannot simulate proposal in ${PROPOSAL_STATES[proposalState]} state.`,
+          );
+        }
 
-    // Convert proposal prices from D27{nanoUSD/tok} to USD/wholeTok
-    // These are the baseline prices reverse-engineered from the proposal's high/low bounds
-    const baselinePrices = convertProposalPricesToUSD(proposalPrices, proposalDecimals, proposalSymbols);
+        // Get decimals array for proposal tokens (needed for price conversion)
+        const proposalDecimals = proposalTokens.map((token) => decimalsRec[token]);
 
-    // Apply random market movements to baseline prices for auction simulation
-    // This simulates price changes that might occur during the governance delay
-    const deviatedPriceData = simulateMarketPrices(baselinePrices, marketVolatility, governanceDelayDays);
+        // Get symbols for proposal tokens
+        const proposalSymbols: string[] = [];
+        for (const token of proposalTokens) {
+          const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
+          proposalSymbols.push(await tokenContract.symbol());
+        }
 
-    // Build two sets of price records:
-    // 1. baselinePriceRec - for measurements and display (no deviation)
-    // 2. auctionPriceRec - for auction execution (with random deviation)
-    const baselinePriceRec: Record<string, { snapshotPrice: number }> = {};
-    const auctionPriceRec: Record<string, { snapshotPrice: number }> = {};
-    const priceChanges: { symbol: string; baseline: number; deviated: number; change: string }[] = [];
+        // Convert proposal prices to USD
+        const baselinePrices = convertProposalPricesToUSD(proposalPrices, proposalDecimals, proposalSymbols);
 
-    // Build the complete price records - using lowercase keys for consistency
-    for (let i = 0; i < allTokens.length; i++) {
-      const token = allTokens[i];
-      const tokenKey = token.toLowerCase(); // Use lowercase key for price lookups
-      const proposalIndex = proposalTokens.indexOf(token);
+        // Simulate market price movements
+        const deviatedPriceData = simulateMarketPrices(baselinePrices, marketVolatility, governanceDelayDays);
 
-      if (proposalIndex >= 0) {
-        // Store baseline price (no deviation)
-        const baseline = baselinePrices[proposalIndex];
-        baselinePriceRec[tokenKey] = { snapshotPrice: baseline };
+        // Build price records
+        const priceChanges: { symbol: string; baseline: number; deviated: number; change: string }[] = [];
 
-        // Store deviated price for auction simulation
-        auctionPriceRec[tokenKey] = deviatedPriceData[proposalIndex.toString()];
+        for (let i = 0; i < allTokens.length; i++) {
+          const token = allTokens[i];
+          const tokenKey = token.toLowerCase();
+          const proposalIndex = proposalTokens.indexOf(token);
 
-        const priceChange = ((auctionPriceRec[tokenKey].snapshotPrice / baseline - 1) * 100).toFixed(2);
-        const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
-        const symbol = await tokenContract.symbol();
+          if (proposalIndex >= 0) {
+            const baseline = baselinePrices[proposalIndex];
+            baselinePriceRec[tokenKey] = { snapshotPrice: baseline };
+            auctionPriceRec[tokenKey] = deviatedPriceData[proposalIndex.toString()];
 
-        // Store for later display
-        priceChanges.push({
-          symbol,
-          baseline: baseline,
-          deviated: auctionPriceRec[tokenKey].snapshotPrice,
-          change: priceChange,
+            const priceChange = ((auctionPriceRec[tokenKey].snapshotPrice / baseline - 1) * 100).toFixed(2);
+            priceChanges.push({
+              symbol: proposalSymbols[proposalIndex] || token,
+              baseline,
+              deviated: auctionPriceRec[tokenKey].snapshotPrice,
+              change: priceChange,
+            });
+          } else {
+            console.log(`   Warning: Token ${token} is in current basket but not in proposal`);
+            baselinePriceRec[tokenKey] = { snapshotPrice: 0 };
+            auctionPriceRec[tokenKey] = { snapshotPrice: 0 };
+          }
+        }
+
+        // Store current amounts
+        for (const token of allTokens) {
+          currentAmountsRec[token] = 0n;
+        }
+        for (let i = 0; i < currentTokens.length; i++) {
+          currentAmountsRec[currentTokens[i]] = currentAmounts[i];
+        }
+
+        // Build target basket from proposal weights
+        for (let i = 0; i < proposalTokens.length; i++) {
+          targetBasketRec[proposalTokens[i]] = proposalWeights[i];
+        }
+
+        // Create price lookup helper
+        const baselinePriceLookup = createPriceLookup(baselinePriceRec);
+
+        // Calculate current basket values
+        let totalCurrentValue = 0;
+        const currentValues: Record<string, number> = {};
+
+        for (const token of currentTokens) {
+          const index = currentTokens.indexOf(token);
+          const balance = currentAmounts[index];
+          const decimals = decimalsRec[token];
+          const tokenPrice = baselinePriceLookup.getPrice(token);
+          if (tokenPrice > 0) {
+            const dollarValue = (tokenPrice * Number(balance)) / Number(10n ** decimals);
+            currentValues[token] = dollarValue;
+            totalCurrentValue += dollarValue;
+          } else {
+            currentValues[token] = 0;
+          }
+        }
+
+        // Calculate proposed basket value breakdown
+        let totalProposedValue = 0;
+        const proposedValues: Record<string, number> = {};
+        for (const token of allTokens) {
+          proposedValues[token] = 0;
+        }
+        for (const token of proposalTokens) {
+          const weight = targetBasketRec[token] || 0n;
+          const decimals = decimalsRec[token];
+          const tokenPrice = baselinePriceLookup.getPrice(token);
+          const wholeTokensPerWholeBU = Number(weight) / (Number(10n ** 9n) * Number(10n ** decimals));
+          const dollarValuePerBU = wholeTokensPerWholeBU * tokenPrice;
+          proposedValues[token] = dollarValuePerBU;
+          totalProposedValue += dollarValuePerBU;
+        }
+
+        // Display basket comparison
+        console.log(`\n📊 Proposal:`);
+        console.log(`   Token     Current → Proposed`);
+        console.log(`   --------- ------- → --------`);
+
+        const allUniqueTokens = new Set([...currentTokens, ...proposalTokens]);
+        for (const token of allUniqueTokens) {
+          const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
+          const sym = await tokenContract.symbol();
+          const currentPercentage = currentValues[token] ? (currentValues[token] / totalCurrentValue) * 100 : 0;
+          const currentStr = currentPercentage > 0 ? `${currentPercentage.toFixed(2)}%` : "    -";
+          const proposedPercentage = proposedValues[token] ? (proposedValues[token] / totalProposedValue) * 100 : 0;
+          const proposedStr = proposedPercentage > 0 ? `${proposedPercentage.toFixed(2)}%` : "    -";
+          let status = "";
+          if (currentPercentage === 0 && proposedPercentage > 0) status = " (NEW)";
+          else if (currentPercentage > 0 && proposedPercentage === 0) status = " (REMOVE)";
+          if (currentPercentage > 0 || proposedPercentage > 0) {
+            console.log(`   ${sym.padEnd(9)} ${currentStr.padStart(7)} → ${proposedStr.padEnd(7)}${status}`);
+          }
+        }
+
+        // Log raw weights
+        console.log(`\n📐 Basket weights (D27{tok/BU} format):`);
+        for (const token of allTokens) {
+          const weight = targetBasketRec[token] || 0n;
+          if (weight > 0n) {
+            const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
+            const sym = await tokenContract.symbol();
+            const isNew = !currentTokens.includes(token) ? " (NEW)" : "";
+            console.log(`   ${sym}: ${weight.toString()}${isNew}`);
+          }
+        }
+
+        // Display price changes
+        console.log(`\n📈 Price simulation (proposal baseline → ${governanceDelayDays.toFixed(1)} days later):`);
+        for (const priceChange of priceChanges) {
+          console.log(
+            `   ${priceChange.symbol}: $${priceChange.baseline.toFixed(2)} → $${priceChange.deviated.toFixed(2)} (${priceChange.change}%)`,
+          );
+        }
+
+        // Calculate normalized target basket for metrics
+        const allTokenDecimals: bigint[] = allTokens.map((token) => decimalsRec[token]);
+        const targetCalculationPrices = allTokens.map((token) => baselinePriceLookup.getPrice(token));
+
+        // Build reordered weights for getTargetBasket
+        const reorderedWeights = allTokens.map((token) => {
+          const proposalIndex = proposalTokens.indexOf(token);
+          if (proposalIndex >= 0) {
+            const p = tokenParams[proposalIndex];
+            return {
+              low: BigInt(p.weight[0].toString()),
+              spot: BigInt(p.weight[1].toString()),
+              high: BigInt(p.weight[2].toString()),
+            };
+          }
+          return { low: 0n, spot: 0n, high: 0n };
         });
-      } else {
-        // For tokens not in proposal (shouldn't happen in normal rebalancing),
-        // we don't have price data. This will be caught by validation later.
-        console.log(`   Warning: Token ${token} is in current basket but not in proposal - no price data available`);
-        baselinePriceRec[tokenKey] = { snapshotPrice: 0 };
-        auctionPriceRec[tokenKey] = { snapshotPrice: 0 };
+
+        const normalizedTargetArray = getTargetBasket(reorderedWeights, targetCalculationPrices, allTokenDecimals, false);
+        allTokens.forEach((token, i) => {
+          normalizedTargetBasketRec[token] = normalizedTargetArray[i];
+        });
+      } catch (error) {
+        throw new Error(`Could not decode proposal calldata.\n Error: ${error}`);
       }
     }
 
-    // Store current amounts (set 0 for tokens not in current basket)
-    for (const token of allTokens) {
-      currentAmountsRec[token] = 0n;
-    }
-    for (let i = 0; i < currentTokens.length; i++) {
-      currentAmountsRec[currentTokens[i]] = currentAmounts[i];
-    }
-
-    // Build target basket from proposal - we know we have valid data at this point
-    // Weights from proposals are in D27{tok/BU} format where tok and BU are smallest units
-    // These are NOT percentages - they represent absolute token amounts per basket unit
-    // tok is smallest unit (e.g., satoshis for BTC, wei for ETH)
-    const targetBasketRec: Record<string, bigint> = {};
-    for (let i = 0; i < proposalTokens.length; i++) {
-      targetBasketRec[proposalTokens[i]] = proposalWeights[i];
-    }
-
-    // Create price lookup helper for baseline prices
-    const baselinePriceLookup = createPriceLookup(baselinePriceRec);
-
-    // Calculate current basket values
-    let totalCurrentValue = 0;
-    const currentValues: Record<string, number> = {};
-
-    for (const token of currentTokens) {
-      const index = currentTokens.indexOf(token);
-      const balance = currentAmounts[index];
-      const decimals = decimalsRec[token];
-      const tokenPrice = baselinePriceLookup.getPrice(token);
-      if (tokenPrice > 0) {
-        const dollarValue = (tokenPrice * Number(balance)) / Number(10n ** decimals);
-        currentValues[token] = dollarValue;
-        totalCurrentValue += dollarValue;
-      } else {
-        // Skip tokens without prices in value calculation
-        currentValues[token] = 0;
-      }
-    }
-
-    // Calculate proposed basket value breakdown
-    let totalProposedValue = 0;
-    const proposedValues: Record<string, number> = {};
-
-    // Initialize proposedValues for all tokens to 0
-    for (const token of allTokens) {
-      proposedValues[token] = 0;
-    }
-
-    for (const token of proposalTokens) {
-      const weight = targetBasketRec[token] || 0n;
-      const decimals = decimalsRec[token];
-      const tokenPrice = baselinePriceLookup.getPrice(token);
-
-      // Weight is in D27{tok/BU} format where tok and BU are smallest units
-      // To get whole tokens per whole BU:
-      // wholeTokensPerWholeBU = weight / (10^27 / 10^18 * 10^tokenDecimals)
-      //                        = weight * 10^18 / (10^27 * 10^tokenDecimals)
-      //                        = weight / (10^9 * 10^tokenDecimals)
-      const wholeTokensPerWholeBU = Number(weight) / (Number(10n ** 9n) * Number(10n ** decimals));
-      const dollarValuePerBU = wholeTokensPerWholeBU * tokenPrice;
-
-      proposedValues[token] = dollarValuePerBU;
-      totalProposedValue += dollarValuePerBU;
-    }
-
-    // Display combined basket breakdown comparison
-    console.log(`\n📊 Proposal:`);
-    console.log(`   Token     Current → Proposed`);
-    console.log(`   --------- ------- → --------`);
-
-    // Get all unique tokens from both baskets
-    const allUniqueTokens = new Set([...currentTokens, ...proposalTokens]);
-
-    for (const token of allUniqueTokens) {
-      const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
-      const symbol = await tokenContract.symbol();
-
-      // Current percentage
-      const currentPercentage = currentValues[token] ? (currentValues[token] / totalCurrentValue) * 100 : 0;
-      const currentStr = currentPercentage > 0 ? `${currentPercentage.toFixed(2)}%` : "    -";
-
-      // Proposed percentage
-      const proposedPercentage = proposedValues[token] ? (proposedValues[token] / totalProposedValue) * 100 : 0;
-      const proposedStr = proposedPercentage > 0 ? `${proposedPercentage.toFixed(2)}%` : "    -";
-
-      // Status indicator
-      let status = "";
-      if (currentPercentage === 0 && proposedPercentage > 0) {
-        status = " (NEW)";
-      } else if (currentPercentage > 0 && proposedPercentage === 0) {
-        status = " (REMOVE)";
-      }
-
-      // Only show if token exists in either basket
-      if (currentPercentage > 0 || proposedPercentage > 0) {
-        console.log(`   ${symbol.padEnd(9)} ${currentStr.padStart(7)} → ${proposedStr.padEnd(7)}${status}`);
-      }
-    }
-
-    // Log basket weights (raw format for reference)
-    console.log(`\n📐 Basket weights (D27{tok/BU} format):`);
-
-    for (const token of allTokens) {
-      const weight = targetBasketRec[token] || 0n;
-      if (weight > 0n) {
-        const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
-        const symbol = await tokenContract.symbol();
-        const isNew = !currentTokens.includes(token) ? " (NEW)" : "";
-        console.log(`   ${symbol}: ${weight.toString()}${isNew}`);
-      }
-    }
-
-    // Run the rebalance simulation
-    console.log(`\n⚡ Running rebalance simulation...`);
-
-    // Display price changes from proposal baseline
-    console.log(`\n📈 Price simulation (proposal baseline → ${governanceDelayDays.toFixed(1)} days later):`);
-    for (const priceChange of priceChanges) {
-      console.log(
-        `   ${priceChange.symbol}: $${priceChange.baseline.toFixed(2)} → $${priceChange.deviated.toFixed(2)} (${priceChange.change}%)`,
-      );
-    }
-
-    // Execute the proposal if not already executed
+    // === Execute the proposal ===
     if (proposalState !== 7) {
       console.log(`\n📝 Executing proposal ${id} in simulation...`);
 
-      // Fast-forward to when proposal can be executed
-      if (proposalState === 0 || proposalState === 1) {
-        // Pending or Active - need to wait for voting to end
-        const votingEnd = Number(await governor.proposalDeadline(id));
+      // For Pending proposals, fast-forward past voting start (snapshot) first
+      // so that quorum() can be queried and votes can be cast
+      if (proposalState === 0) {
+        const snapshot = Number(await governor.proposalSnapshot(id));
+        const currentTime = await time.latest();
+        if (snapshot > currentTime) {
+          await hre.network.provider.send("evm_setNextBlockTimestamp", [snapshot + 1]);
+          await hre.network.provider.send("evm_mine", []);
+        }
+      }
+
+      // Ensure proposal passes (cast FOR votes if needed)
+      await ensureProposalPasses(hre, governor, id);
+
+      // Fast-forward past voting deadline
+      const votingEnd = Number(await governor.proposalDeadline(id));
+      const timeNow = await time.latest();
+      if (votingEnd > timeNow) {
         await hre.network.provider.send("evm_setNextBlockTimestamp", [votingEnd + 1]);
         await hre.network.provider.send("evm_mine", []);
       }
 
-      // Re-fetch the proposal state after fast-forwarding
       const currentProposalState = Number(await governor.state(id));
 
-      // Queue the proposal if it needs queuing
+      // Queue if needed
+      const needsQueuing = await governor.proposalNeedsQueuing(id);
       if (needsQueuing) {
-        // Check if already queued
         const proposalEta = await governor.proposalEta(id);
         const isQueued = proposalEta > 0n;
 
         if (!isQueued && currentProposalState === 4) {
           try {
-            // Use the already converted arrays from earlier
-            const queueDescriptionHash = hre.ethers.id(event.args.description || "");
-
+            const queueDescriptionHash = hre.ethers.id(eventArgs.description || "");
             await whileImpersonating(hre, await admin.getAddress(), async (signer) => {
               await (
                 await (governor.connect(signer) as any).queue(
-                  [...targets], // Create new arrays to avoid read-only issues
+                  [...targets],
                   [...values],
                   [...calldatas],
                   queueDescriptionHash,
                 )
               ).wait();
             });
-
             console.log(`✅ Proposal queued successfully`);
-          } catch (error: any) {
-            // If queue fails, it might already be queued or there's another issue
-            // Try to proceed anyway
-            console.log(`⚠️ Could not queue proposal (may already be queued). Attempting to proceed...`);
+          } catch (queueError: any) {
+            console.log(`⚠️ Queue failed: ${queueError.message?.slice(0, 300)}`);
           }
-        } else if (isQueued) {
-          console.log(`✅ Proposal already queued`);
         }
 
-        // Fast-forward past timelock delay
+        // Fast-forward past timelock delay (only if ETA is in the future)
         const finalProposalEta = await governor.proposalEta(id);
-        if (finalProposalEta > 0n) {
+        const currentTimeForEta = await time.latest();
+        if (finalProposalEta > 0n && Number(finalProposalEta) > currentTimeForEta) {
           await hre.network.provider.send("evm_setNextBlockTimestamp", [Number(finalProposalEta) + 1]);
           await hre.network.provider.send("evm_mine", []);
         }
       }
 
       // Execute the proposal
-      // Use the already converted arrays from earlier
-      const descriptionHash = hre.ethers.id(event.args.description || "");
-
+      const descriptionHash = hre.ethers.id(eventArgs.description || "");
       await whileImpersonating(hre, await admin.getAddress(), async (signer) => {
         await (
           await (governor.connect(signer) as any).execute(
-            [...targets], // Create new arrays to avoid read-only issues
+            [...targets],
             [...values],
             [...calldatas],
             descriptionHash,
@@ -623,165 +566,134 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
       console.log(`\n✅ Proposal ${id} was already executed`);
     }
 
-    // Capture initial state after proposal execution
-    const initialSupply = await folio.totalSupply();
-    const [initialRebalanceTokens, initialAssets] = await folio.totalAssets();
-    const initialAssetsRec: Record<string, bigint> = {};
-    initialRebalanceTokens.forEach((token: string, i: number) => {
-      initialAssetsRec[token] = initialAssets[i];
-    });
+    // === Post-execution: verify version is V5 ===
+    folioVersion = await folio.version();
+    console.log(`📦 Folio version after execution: ${folioVersion}`);
 
-    // Create the initial state object needed for doAuctions
-    // We need to reconstruct startRebalanceArgs from the proposal data
-    // IMPORTANT: Build arrays in allTokens order to match what doAuctions expects
-    const proposalWeightsArray = decoded[1] as any[];
-    const proposalPricesArray = decoded[2] as any[];
-
-    // Reorder weights and prices to match allTokens order
-    const reorderedWeights = [];
-    const reorderedPrices = [];
-
-    for (const token of allTokens) {
-      const proposalIndex = proposalTokens.indexOf(token);
-      if (proposalIndex >= 0) {
-        // Token is in the proposal - use its weights and prices
-        const w = proposalWeightsArray[proposalIndex];
-        reorderedWeights.push({
-          low: BigInt(w[0].toString()),
-          spot: BigInt(w[1].toString()),
-          high: BigInt(w[2].toString()),
-        });
-
-        const p = proposalPricesArray[proposalIndex];
-        reorderedPrices.push({
-          low: BigInt(p[0].toString()),
-          high: BigInt(p[1].toString()),
-        });
-      } else {
-        // Token not in proposal (shouldn't happen for normal rebalancing)
-        // Use zero weights and a wide price range
-        reorderedWeights.push({
-          low: 0n,
-          spot: 0n,
-          high: 0n,
-        });
-        reorderedPrices.push({
-          low: 0n,
-          high: BigInt("999999999999999999999999999999999999"), // Max reasonable price
-        });
-      }
+    if (folioVersion[0] !== "5") {
+      throw new Error(`Folio version after proposal execution is ${folioVersion}, expected 5.x.x`);
     }
 
-    // Validate that all tokens have valid prices before running auctions
-    const tokensWithoutPrices: string[] = [];
-    for (const token of allTokens) {
-      const priceKey = token.toLowerCase();
-      if (
-        !auctionPriceRec[priceKey] ||
-        !auctionPriceRec[priceKey].snapshotPrice ||
-        auctionPriceRec[priceKey].snapshotPrice === 0
-      ) {
-        tokensWithoutPrices.push(token);
-      }
-    }
+    // === Post-execution: run rebalance or post-checks ===
+    if (isRebalanceProposal) {
+      // Capture initial state after proposal execution
+      const initialSupply = await folio.totalSupply();
+      const [initialRebalanceTokens, initialAssets] = await folio.totalAssets();
+      const initialAssetsRec: Record<string, bigint> = {};
+      initialRebalanceTokens.forEach((token: string, i: number) => {
+        initialAssetsRec[token] = initialAssets[i];
+      });
 
-    if (tokensWithoutPrices.length > 0) {
-      throw new Error(
-        `Cannot run auction simulation: Missing or zero price data for tokens:\n` +
-          `${tokensWithoutPrices.join(", ")}\n` +
-          `All tokens involved in the rebalance must have valid price data.`,
+      // Validate all tokens have valid prices
+      const tokensWithoutPrices: string[] = [];
+      for (const token of allTokens) {
+        const priceKey = token.toLowerCase();
+        if (
+          !auctionPriceRec[priceKey] ||
+          !auctionPriceRec[priceKey].snapshotPrice ||
+          auctionPriceRec[priceKey].snapshotPrice === 0
+        ) {
+          tokensWithoutPrices.push(token);
+        }
+      }
+
+      if (tokensWithoutPrices.length > 0) {
+        throw new Error(
+          `Cannot run auction simulation: Missing or zero price data for tokens:\n` +
+            `${tokensWithoutPrices.join(", ")}`,
+        );
+      }
+
+      // Generate random slippage range
+      const minSlippage = 0.001 + Math.random() * 0.003;
+      const maxSlippage = minSlippage + 0.002 + Math.random() * 0.004;
+      const swapSlippageRange: [number, number] = [minSlippage, maxSlippage];
+
+      // Generate random auction price deviation
+      const auctionPriceDeviation = 0.01 + Math.random() * 0.02;
+
+      console.log(`\n⚡ Running auction simulation...`);
+      console.log(`   📊 Auction price deviation: ${(auctionPriceDeviation * 100).toFixed(1)}%`);
+      console.log(`   💱 Swap slippage range: ${(minSlippage * 100).toFixed(2)}% - ${(maxSlippage * 100).toFixed(2)}%`);
+
+      const { totalRebalancedValue } = await doAuctions(
+        FolioVersion.V5,
+        hre,
+        { folio, folioLensTyped },
+        { bidder, rebalanceManager, auctionLauncher, admin },
+        allTokens,
+        initialSupply,
+        initialAssetsRec,
+        targetBasketRec,
+        baselinePriceRec,
+        0.9, // finalStageAt
+        false, // debug
+        auctionPriceDeviation,
+        swapSlippageRange,
       );
-    }
 
-    // Calculate normalized target basket percentages for doAuctions
-    // We need to normalize the raw weights to D18 percentages
-    const allTokenDecimals: bigint[] = [];
-    for (const token of allTokens) {
-      const tokenContract = await hre.ethers.getContractAt("IERC20Metadata", token);
-      allTokenDecimals.push(await tokenContract.decimals());
-    }
+      console.log(`\n✅ Rebalance simulation completed successfully!`);
 
-    // Always use baseline prices for calculating the target basket
-    // The target represents what we want to achieve, independent of market volatility
-    const targetCalculationPrices = allTokens.map((token) => baselinePriceLookup.getPrice(token));
+      // Calculate and display final metrics
+      console.log(`\n📊 Final Rebalance Metrics:`);
 
-    const normalizedTargetArray = getTargetBasket(
-      reorderedWeights,
-      targetCalculationPrices,
-      allTokenDecimals,
-      false, // debug
-    );
+      const metrics = await calculateRebalanceMetrics(
+        hre,
+        folio,
+        allTokens,
+        normalizedTargetBasketRec,
+        baselinePriceRec,
+      );
 
-    const normalizedTargetBasketRec: Record<string, bigint> = {};
-    allTokens.forEach((token, i) => {
-      normalizedTargetBasketRec[token] = normalizedTargetArray[i];
-    });
+      logPercentages(`🔍 Final    `, metrics.finalTargetBasketRec, allTokens);
+      logPercentages(`🎯 Target   `, normalizedTargetBasketRec, allTokens);
 
-    // Generate random slippage range for this simulation
-    const minSlippage = 0.001 + Math.random() * 0.003; // 0.1% to 0.4%
-    const maxSlippage = minSlippage + 0.002 + Math.random() * 0.004; // +0.2% to +0.6% more
-    const swapSlippageRange: [number, number] = [minSlippage, maxSlippage];
+      const errorPercentage = metrics.totalError;
 
-    // Generate random auction price deviation
-    const auctionPriceDeviation = 0.01 + Math.random() * 0.02; // 1% to 3%
-
-    // Now simulate the auctions
-    console.log(`\n⚡ Running auction simulation...`);
-    console.log(`   📊 Auction price deviation: ${(auctionPriceDeviation * 100).toFixed(1)}%`);
-    console.log(`   💱 Swap slippage range: ${(minSlippage * 100).toFixed(2)}% - ${(maxSlippage * 100).toFixed(2)}%`);
-
-    const { totalRebalancedValue } = await doAuctions(
-      folioVersion === "4.0.0" ? FolioVersion.V4 : FolioVersion.V5,
-      hre,
-      { folio, folioLensTyped },
-      { bidder, rebalanceManager, auctionLauncher, admin },
-      allTokens,
-      initialSupply,
-      initialAssetsRec,
-      targetBasketRec,
-      baselinePriceRec,
-      0.9, // finalStageAt
-      false, // debug
-      auctionPriceDeviation,
-      swapSlippageRange,
-    );
-
-    console.log(`\n✅ Rebalance simulation completed successfully!`);
-
-    // Calculate and display final metrics
-    console.log(`\n📊 Final Rebalance Metrics:`);
-
-    // Calculate metrics
-    const metrics = await calculateRebalanceMetrics(
-      hre,
-      folio,
-      allTokens,
-      normalizedTargetBasketRec, // Use the already calculated normalized target
-      baselinePriceRec, // Use baseline prices for consistent error calculation
-    );
-
-    // Log the results
-    logPercentages(`🔍 Final    `, metrics.finalTargetBasketRec, allTokens);
-    logPercentages(`🎯 Target   `, normalizedTargetBasketRec, allTokens);
-
-    // totalError is now directly a percentage (0-100)
-    const errorPercentage = metrics.totalError;
-
-    if (errorPercentage > 0.01) {
-      // 0.01% = 1 basis point
-      console.log(`⚠️  Error     ${errorPercentage.toFixed(4)}%`);
-      if (errorPercentage > 1) {
-        // 1% error threshold
-        console.log(`\n⚠️  Warning: Total error exceeds 1%`);
+      if (errorPercentage > 0.01) {
+        console.log(`⚠️  Error     ${errorPercentage.toFixed(4)}%`);
+        if (errorPercentage > 1) {
+          console.log(`\n⚠️  Warning: Total error exceeds 1%`);
+        }
+      } else {
+        console.log(`✅ Error     ${errorPercentage.toFixed(4)}%`);
       }
+
+      console.log(
+        `\n💰 Total Rebalanced Value: $${totalRebalancedValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      );
+      console.log(
+        `💼 Total Portfolio Value: $${metrics.totalValueAfterFinal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      );
     } else {
-      console.log(`✅ Error     ${errorPercentage.toFixed(4)}%`);
+      // Non-rebalance proposal: mock tokens to prepare for post-checks
+      console.log(`\n🔧 Preparing for post-checks (non-rebalance proposal)...`);
+      const [currentTokens] = await folio.totalAssets();
+      await mockBasketTokens(hre, await folio.getAddress(), [...currentTokens]);
     }
 
-    console.log(
-      `\n💰 Total Rebalanced Value: $${totalRebalancedValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-    );
-    console.log(
-      `💼 Total Portfolio Value: $${metrics.totalValueAfterFinal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-    );
+    // === Post-validations: mint/redeem + validate rebalance + upgrade ===
+    const [bidder2] = await hre.ethers.getSigners();
+    const postChecks: [string, () => Promise<unknown>][] = [
+      ["mint/redeem", () => mintAndRedeem(hre, folio, bidder2)],
+      ["weight shift", () => validateWeightShift(hre, folio, folioLensTyped, undefined, folioConfig.chainId)],
+      ["eject & add", () => validateEjectAndAdd(hre, folio, folioLensTyped, undefined, folioConfig.chainId)],
+      ["upgrade", () => validateUpgrade(hre, folio, folioConfig)],
+    ];
+    const failures: string[] = [];
+    for (const [name, fn] of postChecks) {
+      try {
+        await fn();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.log(`\n❌ Post-check "${name}" failed: ${msg}`);
+        failures.push(name);
+      }
+    }
+
+    if (failures.length > 0) {
+      console.log(`\n🎉 Simulation complete (with ${failures.length} post-check failure(s): ${failures.join(", ")})`);
+    } else {
+      console.log(`\n🎉 Simulation complete!`);
+    }
   });

@@ -7,7 +7,6 @@ import { whileImpersonating } from "./utils";
 
 import FolioArtifact from "../out/Folio.sol/Folio.json";
 import FolioLensArtifact from "../out/FolioLens.sol/FolioLens.json";
-import MathLibArtifact from "../out/MathLib.sol/MathLib.json";
 import RebalancingLibArtifact from "../out/RebalancingLib.sol/RebalancingLib.json";
 import ProxyAdminArtifact from "../out/ProxyAdmin.sol/ProxyAdmin.json";
 import * as dotenv from "dotenv";
@@ -36,6 +35,13 @@ export async function initializeChainState(
   await hre.ethers.provider.send("evm_mine", []); // Mine a new block to ensure RPC works
 }
 
+export async function deployFolioLens(hre: HardhatRuntimeEnvironment) {
+  const factory = await hre.ethers.getContractFactory(FolioLensArtifact.abi, FolioLensArtifact.bytecode.object);
+  const lens = await factory.deploy();
+  await lens.waitForDeployment();
+  return await hre.ethers.getContractAt(FolioLensArtifact.abi, await lens.getAddress());
+}
+
 export async function setupContractsAndSigners(hre: HardhatRuntimeEnvironment, folioConfig: FolioConfig) {
   let bidder: HardhatEthersSigner;
   let admin: HardhatEthersSigner;
@@ -57,13 +63,7 @@ export async function setupContractsAndSigners(hre: HardhatRuntimeEnvironment, f
     await folio.getRoleMember("0x13ff1b2625181b311f257c723b5e6d366eb318b212d9dd694c48fcf227659df5", 0), // AUCTION_LAUNCHER
   );
 
-  const FolioLensFactory = await hre.ethers.getContractFactory(
-    FolioLensArtifact.abi,
-    FolioLensArtifact.bytecode.object,
-  );
-  const folioLens = await FolioLensFactory.deploy();
-  await folioLens.waitForDeployment();
-  const folioLensTyped = await hre.ethers.getContractAt(FolioLensArtifact.abi, await folioLens.getAddress());
+  const folioLensTyped = await deployFolioLens(hre);
 
   return { folio, folioLensTyped, bidder, admin, rebalanceManager, auctionLauncher };
 }
@@ -79,27 +79,12 @@ export async function deployCommonContracts(hre: HardhatRuntimeEnvironment, foli
 
   const folio = await hre.ethers.getContractAt(FolioArtifact.abi, folioConfig.folio);
 
-  const MathLibFactory = await hre.ethers.getContractFactory(MathLibArtifact.abi, MathLibArtifact.bytecode.object);
-  const mathLib = await MathLibFactory.deploy();
-  await mathLib.waitForDeployment();
-
   const RebalancingLibFactory = await hre.ethers.getContractFactory(
     RebalancingLibArtifact.abi,
     RebalancingLibArtifact.bytecode.object,
   );
   const rebalancingLib = await RebalancingLibFactory.deploy();
   await rebalancingLib.waitForDeployment();
-
-  const FolioLensFactory = await hre.ethers.getContractFactory(
-    FolioLensArtifact.abi,
-    FolioLensArtifact.bytecode.object.replace(
-      /__\$[a-fA-F0-9]+\$__/g,
-      (await mathLib.getAddress()).slice(2).padEnd(40, "0"),
-    ),
-  );
-  const folioLens = await FolioLensFactory.deploy();
-  await folioLens.waitForDeployment();
-  const folioLensTyped = await hre.ethers.getContractAt(FolioLensArtifact.abi, await folioLens.getAddress());
 
   const proxyAdmin = await hre.ethers.getContractAt(ProxyAdminArtifact.abi, folioConfig.proxyAdmin);
 
@@ -126,5 +111,8 @@ export async function deployCommonContracts(hre: HardhatRuntimeEnvironment, foli
     await tx.wait();
   });
 
+  const folioLensTyped = await deployFolioLens(hre);
+
   return { admin, bidder, folio, folioLensTyped, rebalanceManager, auctionLauncher, proxyAdmin };
 }
+
