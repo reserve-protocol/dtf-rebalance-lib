@@ -1,6 +1,6 @@
-import { FolioVersion } from "../../src/types";
+import { FolioVersion } from "../../../src/types";
 
-import { FolioConfig } from "../types";
+import type { FolioConfig } from "./types";
 
 export const CHAIN_BLOCK_NUMBERS: Record<number, number | undefined> = {
   1: 24584728,

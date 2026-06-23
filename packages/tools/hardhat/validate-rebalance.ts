@@ -3,8 +3,8 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { Contract } from "ethers";
 
-import { bn } from "../src/numbers";
-import { FolioVersion } from "../src/types";
+import { bn } from "../../../src/numbers";
+import { FolioVersion } from "../../../src/types";
 
 import { startRebalance } from "./start-rebalance";
 import { doAuctions } from "./do-auctions";

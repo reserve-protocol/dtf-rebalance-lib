@@ -4,6 +4,7 @@
 cache
 out
 artifacts
+typechain-types
 
 dist
 node_modules

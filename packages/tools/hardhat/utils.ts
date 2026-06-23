@@ -4,7 +4,8 @@ import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 
-import { bn } from "../src/numbers";
+import { bn } from "../../../src/numbers";
+export { getAssetPrices } from "../src/prices";
 
 export function toPlainObject(obj: any): any {
   if (typeof obj !== "object" || obj === null) {
@@ -30,135 +31,6 @@ export function toPlainObject(obj: any): any {
   }
   return plainObject;
 }
-
-type TokenPrice = {
-  address: string;
-  price?: number;
-};
-
-type HistoricalPriceResponse = {
-  address: string;
-  timeseries: {
-    price: number;
-    timestamp: number;
-  }[];
-};
-
-type TokenPriceWithSnapshot = Record<string, { currentPrice: number; snapshotPrice: number }>;
-
-export const getAssetPrices = async (
-  tokens: string[],
-  chainId: number,
-  timestamp: number,
-): Promise<TokenPriceWithSnapshot> => {
-  await new Promise((resolve) => setTimeout(resolve, 100)); // base rate limiting
-
-  if (!tokens?.length) return {};
-
-  const RESERVE_API = "https://api.reserve.org/"; // Assuming this is the base API URL
-
-  const currentPricesUrl = `${RESERVE_API}current/prices?chainId=${chainId}&tokens=${tokens.join(",")}`;
-  const currentPricesResponse = await fetch(currentPricesUrl);
-  const currentPricesData = (await currentPricesResponse.json()) as TokenPrice[];
-
-  const result: TokenPriceWithSnapshot = currentPricesData.reduce((acc, tokenData) => {
-    const price = tokenData.price ?? 0;
-    // Use original address casing from API response
-    acc[tokenData.address] = {
-      currentPrice: price,
-      snapshotPrice: 0,
-    };
-    return acc;
-  }, {} as TokenPriceWithSnapshot);
-
-  // Ensure tokens array is not empty for historical fetch
-  const from = Number(timestamp) - 3600;
-  const to = Number(timestamp) + 3600;
-  const baseUrl = `${RESERVE_API}historical/prices?chainId=${chainId}&from=${from}&to=${to}&interval=1h&address=`;
-
-  // Create a map of original token casing to handle potential discrepancies from historical API if any
-  // However, historical API also returns "address" field which should be used.
-  // The tokens in the `tokens` array are used to make the calls.
-  const calls = tokens.map(
-    (tokenAddress) => fetch(`${baseUrl}${tokenAddress}`).then((res) => res.json()), // Use original tokenAddress for API call
-  );
-
-  // Helper to process historical responses and update result
-  const processHistoricalResponses = (responses: HistoricalPriceResponse[]): boolean => {
-    let allFound = true;
-    for (const historicalData of responses) {
-      const addressFromApi = historicalData.address;
-      const price =
-        historicalData.timeseries.length === 0
-          ? 0
-          : historicalData.timeseries[Math.floor(historicalData.timeseries.length / 2)].price;
-
-      if (result[addressFromApi]) {
-        result[addressFromApi].snapshotPrice = price;
-      } else {
-        result[addressFromApi] = {
-          currentPrice: 0,
-          snapshotPrice: price,
-        };
-      }
-
-      if (!result[addressFromApi]?.snapshotPrice) {
-        allFound = false;
-      }
-    }
-    return allFound;
-  };
-
-  const historicalResponses = await (<Promise<HistoricalPriceResponse[]>>Promise.all(calls));
-  let foundAll = processHistoricalResponses(historicalResponses);
-
-  // Retry on failure
-  if (!foundAll) {
-    await new Promise((resolve) => setTimeout(resolve, 2000)); // sleep 2s to let the api cooldown
-
-    // add dummy var to end to force cache clear
-    const retryCalls = tokens.map((tokenAddress) =>
-      fetch(`${baseUrl}${tokenAddress}&t=${Date.now()}`).then((res) => res.json()),
-    );
-
-    const retryResponses = await (<Promise<HistoricalPriceResponse[]>>Promise.all(retryCalls));
-    foundAll = processHistoricalResponses(retryResponses);
-  }
-
-  if (!foundAll) {
-    console.log("timestamp", timestamp);
-    console.log("prices", result);
-    throw new Error("Failed to fetch all prices");
-  }
-
-  // Create a mapping from lowercase addresses to result keys for case-insensitive lookup
-  const resultKeys = Object.keys(result);
-  const lowercaseToKey: Record<string, string> = {};
-  for (const key of resultKeys) {
-    lowercaseToKey[key.toLowerCase()] = key;
-  }
-
-  for (const token of tokens) {
-    const resultKey = lowercaseToKey[token.toLowerCase()];
-    if (!resultKey || !result[resultKey]) {
-      console.log(`Warning: No price data found for token ${token}`);
-      continue;
-    }
-    const priceData = result[resultKey];
-    if (priceData.snapshotPrice === 0) {
-      console.log(`Warning: Snapshot price is 0 for token ${token}, skipping ratio check`);
-      continue;
-    }
-    const priceRatio = Math.abs(priceData.currentPrice - priceData.snapshotPrice) / priceData.snapshotPrice;
-    if (priceRatio > 10) {
-      console.log("timestamp", timestamp);
-      console.log("prices", priceData);
-      throw new Error(`price ratio for token ${token} is too extreme: ${priceRatio}`);
-    }
-  }
-
-  return result;
-};
 
 export async function whileImpersonating(
   hre: HardhatRuntimeEnvironment,

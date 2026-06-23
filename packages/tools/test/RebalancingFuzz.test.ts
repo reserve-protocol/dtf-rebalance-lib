@@ -3,14 +3,14 @@ import { Contract } from "ethers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
-import { FolioVersion } from "../src/types";
+import { FolioVersion } from "../../../src/types";
 
-import { getAssetPrices, logPercentages, normalizePrices } from "./utils";
-import { initializeChainState, setupContractsAndSigners } from "./setup";
-import { startRebalance } from "./start-rebalance";
-import { doAuctions } from "./do-auctions";
+import { getAssetPrices, logPercentages, normalizePrices } from "../hardhat/utils";
+import { initializeChainState, setupContractsAndSigners } from "../hardhat/setup";
+import { startRebalance } from "../hardhat/start-rebalance";
+import { doAuctions } from "../hardhat/do-auctions";
 
-import { FOLIO_CONFIGS, CHAIN_BLOCK_NUMBERS } from "./5.0.0/config";
+import { FOLIO_CONFIGS, CHAIN_BLOCK_NUMBERS } from "../hardhat/config";
 
 const TEST_FOLIO_CONFIGS = FOLIO_CONFIGS.filter((f) => f.name === "BED");
 

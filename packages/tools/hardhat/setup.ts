@@ -4,11 +4,8 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { FolioConfig } from "./types";
 import { whileImpersonating } from "./utils";
+import { loadSdk } from "../src/sdk";
 
-import FolioArtifact from "../out/Folio.sol/Folio.json";
-import FolioLensArtifact from "../out/FolioLens.sol/FolioLens.json";
-import RebalancingLibArtifact from "../out/RebalancingLib.sol/RebalancingLib.json";
-import ProxyAdminArtifact from "../out/ProxyAdmin.sol/ProxyAdmin.json";
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -18,6 +15,13 @@ const CHAIN_RPC_URLS: Record<number, string | undefined> = {
   8453: process.env.BASE_RPC_URL,
   56: process.env.BSC_RPC_URL,
 };
+
+const DTF_ARTIFACTS = "../../../node_modules/@reserve-protocol/reserve-index-dtf/out";
+
+const loadFolioArtifact = () => require(`${DTF_ARTIFACTS}/Folio.sol/Folio.json`);
+const loadFolioLensArtifact = () => require(`${DTF_ARTIFACTS}/FolioLens.sol/FolioLens.json`);
+const loadRebalancingLibArtifact = () => require(`${DTF_ARTIFACTS}/RebalancingLib.sol/RebalancingLib.json`);
+const loadProxyAdminArtifact = () => require(`${DTF_ARTIFACTS}/FolioProxy.sol/FolioProxyAdmin.json`);
 
 export async function initializeChainState(
   hre: HardhatRuntimeEnvironment,
@@ -36,6 +40,7 @@ export async function initializeChainState(
 }
 
 export async function deployFolioLens(hre: HardhatRuntimeEnvironment) {
+  const FolioLensArtifact = loadFolioLensArtifact();
   const factory = await hre.ethers.getContractFactory(FolioLensArtifact.abi, FolioLensArtifact.bytecode.object);
   const lens = await factory.deploy();
   await lens.waitForDeployment();
@@ -50,7 +55,8 @@ export async function setupContractsAndSigners(hre: HardhatRuntimeEnvironment, f
 
   [bidder] = await hre.ethers.getSigners();
 
-  const folio = await hre.ethers.getContractAt(FolioArtifact.abi, folioConfig.folio);
+  const { dtfIndexAbi } = await loadSdk();
+  const folio = await hre.ethers.getContractAt(dtfIndexAbi as any, folioConfig.folio);
 
   admin = await hre.ethers.getSigner(
     await folio.getRoleMember("0x0000000000000000000000000000000000000000000000000000000000000000", 0),
@@ -76,6 +82,10 @@ export async function deployCommonContracts(hre: HardhatRuntimeEnvironment, foli
 
   const signers = await hre.ethers.getSigners();
   [bidder, admin, rebalanceManager, auctionLauncher] = signers;
+
+  const FolioArtifact = loadFolioArtifact();
+  const RebalancingLibArtifact = loadRebalancingLibArtifact();
+  const ProxyAdminArtifact = loadProxyAdminArtifact();
 
   const folio = await hre.ethers.getContractAt(FolioArtifact.abi, folioConfig.folio);
 
@@ -115,4 +125,3 @@ export async function deployCommonContracts(hre: HardhatRuntimeEnvironment, foli
 
   return { admin, bidder, folio, folioLensTyped, rebalanceManager, auctionLauncher, proxyAdmin };
 }
-

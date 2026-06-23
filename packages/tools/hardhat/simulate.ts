@@ -2,14 +2,15 @@ import { task } from "hardhat/config";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
-import { FolioVersion } from "../src/types";
-import { getTargetBasket } from "../src/open-auction";
+import { FolioVersion } from "../../../src/types";
+import { getTargetBasket } from "../../../src/open-auction";
 
-import { initializeChainState, setupContractsAndSigners } from "../test/setup";
-import { doAuctions } from "../test/do-auctions";
-import { mintAndRedeem } from "../test/mint-redeem";
-import { validateWeightShift, validateEjectAndAdd } from "../test/validate-rebalance";
-import { validateUpgrade } from "../test/validate-upgrade";
+import { initializeChainState, setupContractsAndSigners } from "./setup";
+import { doAuctions } from "./do-auctions";
+import { mintAndRedeem } from "./mint-redeem";
+import { validateWeightShift, validateEjectAndAdd } from "./validate-rebalance";
+import { validateUpgrade } from "./validate-upgrade";
+import { loadSdk } from "../src/sdk";
 import {
   calculateRebalanceMetrics,
   logPercentages,
@@ -19,11 +20,9 @@ import {
   whileImpersonating,
   ensureProposalPasses,
   mockBasketTokens,
-} from "../test/utils";
+} from "./utils";
 
-import { FOLIO_CONFIGS } from "../test/5.0.0/config";
-
-import FolioGovernorArtifact from "../out/FolioGovernor.sol/FolioGovernor.json";
+import { FOLIO_CONFIGS } from "./config";
 
 task("simulate", "Run a live rebalance simulation for a governance proposal")
   .addParam("id", "The governance proposal ID")
@@ -83,11 +82,8 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     console.log(`📦 Folio version: ${folioVersion}`);
 
     // Auto-detect governor: try basketGovernor first, fall back to nonBasketGovernor
-    const governorAbi = [
-      ...FolioGovernorArtifact.abi,
-      "function queue(address[] targets, uint256[] values, bytes[] calldatas, bytes32 descriptionHash) returns (uint256)",
-      "function execute(address[] targets, uint256[] values, bytes[] calldatas, bytes32 descriptionHash) payable returns (uint256)",
-    ];
+    const { dtfIndexAbi, dtfIndexGovernanceAbi } = await loadSdk();
+    const governorAbi = dtfIndexGovernanceAbi as any;
 
     let governor;
     let governorAddress: string | undefined;
@@ -203,11 +199,8 @@ task("simulate", "Run a live rebalance simulation for a governance proposal")
     const calldata = calldatas[0];
     console.log(`   Found ${calldatas.length} action(s) in proposal`);
 
-    // Detect if this is a V5 startRebalance proposal
-    // V5 startRebalance: (TokenRebalanceParams[], RebalanceLimits, uint256, uint256)
-    const ifaceV5 = new hre.ethers.Interface([
-      "function startRebalance((address token, (uint256 low, uint256 spot, uint256 high) weight, (uint256 low, uint256 high) price, uint256 maxAuctionSize, bool inRebalance)[] tokens, (uint256 low, uint256 spot, uint256 high) limits, uint256 auctionLauncherWindow, uint256 ttl)",
-    ]);
+    // Detect if this is a V5 startRebalance proposal.
+    const ifaceV5 = new hre.ethers.Interface(dtfIndexAbi as any);
 
     let isRebalanceProposal = false;
     const parsedV5 = ifaceV5.parseTransaction({ data: calldata as string });

@@ -3,12 +3,11 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
 import { whileImpersonating } from "./utils";
-import { getStartRebalance } from "../src/start-rebalance";
-import { FolioVersion } from "../src/types";
-import { RebalanceContracts, RebalanceSigners } from "./types";
-
-import { StartRebalanceArgsPartial as StartRebalanceArgsPartial_4_0_0 } from "../src/4.0.0/types";
-import { StartRebalanceArgsPartial as StartRebalanceArgsPartial_5_0_0 } from "../src/types";
+import { getStartRebalance } from "../../../src/start-rebalance";
+import { FolioVersion } from "../../../src/types";
+import type { RebalanceContracts, RebalanceSigners } from "./types";
+import type { StartRebalanceArgsPartial as StartRebalanceArgsPartialV4 } from "../../../src/4.0.0/types";
+import type { StartRebalanceArgsPartial as StartRebalanceArgsPartialV5 } from "../../../src/types";
 
 export async function startRebalance(
   version: FolioVersion,
@@ -64,7 +63,7 @@ export async function startRebalance(
   const decimalsArray = tokens.map((token: string) => allDecimalsRec[token]);
   const targetBasketArray = tokens.map((token: string) => targetBasketRec[token]);
 
-  const startRebalanceArgs: StartRebalanceArgsPartial_4_0_0 | StartRebalanceArgsPartial_5_0_0 = getStartRebalance(
+  const startRebalanceArgs: StartRebalanceArgsPartialV4 | StartRebalanceArgsPartialV5 = getStartRebalance(
     version,
     initialSupply,
     tokens,
@@ -104,10 +103,10 @@ export async function startRebalance(
       const v4Folio = new hre.ethers.Contract(await folio.getAddress(), v4Iface, signer);
       await (
         await v4Folio.startRebalance(
-          (startRebalanceArgs as StartRebalanceArgsPartial_4_0_0).tokens,
-          (startRebalanceArgs as StartRebalanceArgsPartial_4_0_0).weights,
-          (startRebalanceArgs as StartRebalanceArgsPartial_4_0_0).prices,
-          (startRebalanceArgs as StartRebalanceArgsPartial_4_0_0).limits,
+          (startRebalanceArgs as StartRebalanceArgsPartialV4).tokens,
+          (startRebalanceArgs as StartRebalanceArgsPartialV4).weights,
+          (startRebalanceArgs as StartRebalanceArgsPartialV4).prices,
+          (startRebalanceArgs as StartRebalanceArgsPartialV4).limits,
           0n,
           1000000n,
         )
@@ -115,8 +114,8 @@ export async function startRebalance(
     } else if (version === FolioVersion.V5) {
       await (
         await (folio.connect(signer) as any).startRebalance(
-          (startRebalanceArgs as StartRebalanceArgsPartial_5_0_0).tokens,
-          (startRebalanceArgs as StartRebalanceArgsPartial_5_0_0).limits,
+          (startRebalanceArgs as StartRebalanceArgsPartialV5).tokens,
+          (startRebalanceArgs as StartRebalanceArgsPartialV5).limits,
           0n,
           1000000n,
         )

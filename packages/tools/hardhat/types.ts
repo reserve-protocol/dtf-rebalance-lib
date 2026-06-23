@@ -1,7 +1,7 @@
 import { Contract } from "ethers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 
-import { FolioVersion } from "../src/types";
+import { FolioVersion } from "../../../src/types";
 
 export interface FolioConfig {
   version: FolioVersion;

@@ -4,6 +4,12 @@ Rebalancing library for DTFs in typescript. Computes the parameters needed to re
 
 For detailed formulas and worked examples, see [docs/auction-algorithm.md](docs/auction-algorithm.md).
 
+## Repository layout
+
+The root package, `@reserve-protocol/dtf-rebalance-lib`, is the SDK-independent core and the only package released from this repository. It stays deterministic and does not depend on `@reserve-protocol/sdk`, RPCs, subgraphs, Reserve API, Hardhat, or deployed DTF metadata.
+
+Internal SDK-aware operational code lives under `packages/tools`. It is a private workspace used by repo-local scripts, fork tests, and Hardhat task adapters. It is not published to npm and is not part of the `@reserve-protocol/dtf-rebalance-lib` release artifact.
+
 ## How rebalancing works
 
 Rebalancing is a two-phase process:

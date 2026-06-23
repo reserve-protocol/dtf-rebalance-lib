@@ -6,11 +6,13 @@ import { whileImpersonating } from "./utils";
 import { deployFolioLens } from "./setup";
 import { FolioConfig } from "./types";
 
-import FolioArtifact from "../out/Folio.sol/Folio.json";
-import RebalancingLibArtifact from "../out/RebalancingLib.sol/RebalancingLib.json";
-
 // EIP-1967 implementation slot
 const IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
+
+const DTF_ARTIFACTS = "../../../node_modules/@reserve-protocol/reserve-index-dtf/out";
+
+const loadFolioArtifact = () => require(`${DTF_ARTIFACTS}/Folio.sol/Folio.json`);
+const loadRebalancingLibArtifact = () => require(`${DTF_ARTIFACTS}/RebalancingLib.sol/RebalancingLib.json`);
 
 /**
  * Post-check: verify the Folio proxy is still upgradeable.
@@ -32,6 +34,7 @@ export async function validateUpgrade(
   const implBefore = await hre.ethers.provider.getStorage(folioAddress, IMPLEMENTATION_SLOT);
 
   // Deploy RebalancingLib
+  const RebalancingLibArtifact = loadRebalancingLibArtifact();
   const RebalancingLibFactory = await hre.ethers.getContractFactory(
     RebalancingLibArtifact.abi,
     RebalancingLibArtifact.bytecode.object,
@@ -40,6 +43,7 @@ export async function validateUpgrade(
   await rebalancingLib.waitForDeployment();
 
   // Deploy new Folio implementation with linked library
+  const FolioArtifact = loadFolioArtifact();
   const FolioFactory = await hre.ethers.getContractFactory(
     FolioArtifact.abi,
     FolioArtifact.bytecode.object.replace(/__\$[a-fA-F0-9]+\$__/g, (await rebalancingLib.getAddress()).slice(2)),
