@@ -48,7 +48,7 @@ Each call to `getOpenAuction()` produces one of three round types:
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `version` | `FolioVersion` | Protocol version (`V4` or `V5`) |
+| `version` | `FolioVersion` | Protocol version (`V4`, `V5`, or `V6`) |
 | `_supply` | `bigint` | Current total share supply |
 | `tokens` | `string[]` | Token addresses in the basket |
 | `_assets` | `bigint[]` | Current token balances |
@@ -56,12 +56,12 @@ Each call to `getOpenAuction()` produces one of three round types:
 | `_targetBasket` | `bigint[]` | D18 ideal basket proportions |
 | `_prices` | `number[]` | USD price per whole token |
 | `_priceError` | `number[]` | Price error fraction per token |
-| `_maxAuctionSizes` | `number[]` | Max USD auction size per token |
+| `_maxAuctionSizes` | `number[]` | Max USD auction size per token (`V5`/`V6`; ignored by `V4`) |
 | `weightControl` | `boolean` | `false` = tracking, `true` = native |
 | `deferWeights` | `boolean` | Use full weight range (native only) |
 | `debug` | `boolean?` | Log debug output |
 
-**Returns** `StartRebalanceArgsPartial` -- contains `tokens` (with weight ranges, price ranges, and max auction sizes per token) and `limits` (low/spot/high).
+**Returns** `StartRebalanceArgsPartial` -- contains `tokens` (with weight ranges, price ranges, and max auction sizes per token for `V5`/`V6`) and `limits` (low/spot/high). Folio `V6` additionally requires the caller to pass the expected rebalance nonce to the on-chain `startRebalance()` call.
 
 ### `getOpenAuction()`
 
@@ -79,8 +79,15 @@ Each call to `getOpenAuction()` produces one of three round types:
 | `_priceError` | `number[]` | Price error fraction per token |
 | `_finalStageAt` | `number` | Progression threshold to enter FINAL (e.g. 0.9) |
 | `debug` | `boolean?` | Log debug output |
+| `_auctionLength` | `bigint?` | Required for `V6`; omitted for `V4`/`V5` |
 
-**Returns** `[OpenAuctionArgs, AuctionMetrics]` -- the on-chain call arguments and a metrics object describing the round type, progression, and per-token surplus/deficit sizes.
+**Returns** `[OpenAuctionArgs, AuctionMetrics]` -- the on-chain call arguments and a metrics object describing the round type, progression, and per-token surplus/deficit sizes. For `V6`, `OpenAuctionArgs.auctionLength` is included and must be supplied to the on-chain `openAuction()` call.
+
+## Version Notes
+
+The default exported `Rebalance` and `StartRebalanceArgsPartial` types match the `V5` shape for compatibility. Version-specific aliases are also exported: `RebalanceV4`, `RebalanceV5`, `RebalanceV6`, `StartRebalanceArgsPartialV4`, `StartRebalanceArgsPartialV5`, and `StartRebalanceArgsPartialV6`.
+
+Folio `V6` uses the same rebalance math as `V5`, plus protocol ABI differences: `startRebalance()` requires an expected nonce and `openAuction()` requires `auctionLength`.
 
 ## Utility functions
 

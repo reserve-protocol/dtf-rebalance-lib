@@ -1,6 +1,6 @@
 {
   "name": "@reserve-protocol/dtf-rebalance-lib",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "description": "Rebalancing library for DTFs in typescript",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -20,7 +20,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "compile": "hardhat compile",
-    "compile:dtf-artifacts": "forge compile --root node_modules/@reserve-protocol/reserve-index-dtf -R forge-std=$PWD/node_modules/forge-std/src/ -R @prb/math=$PWD/node_modules/@prb/math/ -R @reserve-protocol/trusted-fillers=$PWD/node_modules/@reserve-protocol/trusted-fillers/ contracts/Folio.sol contracts/periphery/FolioLens.sol contracts/utils/RebalancingLib.sol contracts/folio/FolioProxy.sol",
+    "compile:dtf-artifacts": "FOUNDRY_PROFILE=reserve-index-dtf forge build --skip script --skip test",
     "build": "npm run clean && tsc --project tsconfig.build.json",
     "build:internal-tools": "npm run build -w @reserve-protocol/dtf-rebalance-tools",
     "build:tools": "npm run build:internal-tools",
@@ -54,7 +54,7 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@openzeppelin/contracts": "^5.3.0",
-    "@reserve-protocol/reserve-index-dtf": "github:reserve-protocol/reserve-index-dtf#5db814757dc0b0649483a1c2c29e54e687010003",
+    "@reserve-protocol/reserve-index-dtf": "github:reserve-protocol/reserve-index-dtf#e3b66635f13f3059e1762255882d4fc21c4e03df",
     "@types/node": "^24.0.0",
     "dotenv": "^16.5.0",
     "hardhat": "^2.24.1",

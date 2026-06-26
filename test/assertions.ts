@@ -50,4 +50,5 @@ export const assertOpenAuctionArgsEqual = (a: OpenAuctionArgs, b: OpenAuctionArg
   }
 
   assertRebalanceLimitsEqual(a.newLimits, b.newLimits, precision);
+  assert.equal(a.auctionLength, b.auctionLength);
 };

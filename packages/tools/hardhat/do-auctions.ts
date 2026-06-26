@@ -6,11 +6,22 @@ import { Contract } from "ethers";
 
 import { whileImpersonating, toPlainObject, createPriceLookup, logPercentages, mockBasketTokens } from "./utils";
 import { bn } from "../../../src/numbers";
-import { AuctionRound, FolioVersion, type AuctionMetrics, type OpenAuctionArgs, type WeightRange } from "../../../src/types";
+import {
+  AuctionRound,
+  FolioVersion,
+  type AuctionMetrics,
+  type OpenAuctionArgs,
+  type WeightRange,
+} from "../../../src/types";
 import { getOpenAuction, getTargetBasket } from "../../../src/open-auction";
 import type { RebalanceContracts, RebalanceSigners } from "./types";
-import type { Rebalance as RebalanceV4 } from "../../../src/4.0.0/types";
-import type { Rebalance as RebalanceV5 } from "../../../src/types";
+import {
+  getAuctionLengthForVersion,
+  getRebalanceForVersion,
+  submitOpenAuctionForVersion,
+  toRebalanceView,
+  type VersionedRebalance,
+} from "./versioned-folio";
 
 export async function doAuctions(
   version: FolioVersion,
@@ -98,19 +109,8 @@ export async function doAuctions(
 
   const doAuction = async (auctionNumber: number): Promise<[OpenAuctionArgs, AuctionMetrics]> => {
     // can have fewer tokens than orderedTokens, because some have been successfully ejected
-    let rebalanceState: RebalanceV4 | RebalanceV5;
-    if (version === FolioVersion.V4) {
-      // V4 getRebalance returns a different struct than V5; use inline ABI since out/ artifacts are V5
-      const v4Iface = new hre.ethers.Interface([
-        "function getRebalance() view returns (uint256 nonce, address[] tokens, (uint256 low, uint256 spot, uint256 high)[] weights, (uint256 low, uint256 high)[] initialPrices, bool[] inRebalance, (uint256 low, uint256 spot, uint256 high) limits, uint256 startedAt, uint256 restrictedUntil, uint256 availableUntil, uint8 priceControl)",
-      ]);
-      const v4Folio = new hre.ethers.Contract(await folio.getAddress(), v4Iface, hre.ethers.provider);
-      rebalanceState = await v4Folio.getRebalance();
-    } else {
-      rebalanceState = await folio.getRebalance();
-    }
-    const rebalanceState4_0_0 = rebalanceState as RebalanceV4;
-    const rebalanceState5_0_0 = rebalanceState as RebalanceV5;
+    const rebalanceState: VersionedRebalance = await getRebalanceForVersion(version, hre, folio);
+    const rebalanceView = toRebalanceView(version, rebalanceState);
 
     const [currentTokens, currentAssets] = await folio.totalAssets();
     const currentValues: Record<string, number> = {};
@@ -137,10 +137,7 @@ export async function doAuctions(
     // log current distribution
     console.log(`\n📊 Auction ${auctionNumber} [${currentBasket.join(", ")}]`);
 
-    // rebalanceState was already fetched above
-    const availableUntil =
-      version === FolioVersion.V4 ? rebalanceState4_0_0.availableUntil : rebalanceState5_0_0.timestamps.availableUntil;
-    expect(availableUntil).to.be.greaterThan(await time.latest());
+    expect(rebalanceView.availableUntil).to.be.greaterThan(await time.latest());
 
     // ==============================
 
@@ -157,25 +154,22 @@ export async function doAuctions(
     // Populate auction calldata
     {
       // Build arrays in rebalanceState.tokens order, not tokens order
-      for (let idx = 0; idx < rebalanceState.tokens.length; idx++) {
-        const token =
-          version === FolioVersion.V4 ? rebalanceState4_0_0.tokens[idx] : rebalanceState5_0_0.tokens[idx].token;
+      for (let idx = 0; idx < rebalanceView.tokens.length; idx++) {
+        const rebalanceToken = rebalanceView.tokens[idx];
+        const token = rebalanceToken.token;
 
         if (orderedTokens.indexOf(token) < 0) {
           throw new Error(`Token ${token} in rebalance state but not in orderedTokens`);
         }
 
         // === initialWeights ===
-        const originalWeight =
-          version === FolioVersion.V4 ? rebalanceState4_0_0.weights[idx] : rebalanceState5_0_0.tokens[idx].weight;
-        initialWeights.push(originalWeight);
+        initialWeights.push(rebalanceToken.weight);
 
         // === initialAssets ===
         initialAssets.push(initialAssetsRec[token]);
 
         // === initialPrices ===
-        const originalPrice =
-          version === FolioVersion.V4 ? rebalanceState4_0_0.initialPrices[idx] : rebalanceState5_0_0.tokens[idx].price;
+        const originalPrice = rebalanceToken.price;
 
         // {USD/wholeTok} = D27{nanoUSD/tok} / D27 / {nanoUSD/USD} * {tok/wholeTok}
         const lowPriceUSD = Number(originalPrice.low) / Number(10n ** 36n / 10n ** allDecimalsRec[token]);
@@ -207,6 +201,8 @@ export async function doAuctions(
       debug,
     );
 
+    const auctionLength = await getAuctionLengthForVersion(version, folio);
+
     const [openAuctionArgsLocal, auctionMetrics] = getOpenAuction(
       version,
       rebalanceState,
@@ -220,6 +216,7 @@ export async function doAuctions(
       deviatedAuctionPrices.map((_: number) => auctionPriceDeviation),
       finalStageAt,
       debug,
+      auctionLength,
     );
 
     console.log(
@@ -234,15 +231,7 @@ export async function doAuctions(
 
     // openAuction()
     await whileImpersonating(hre, await auctionLauncher.getAddress(), async (signer) => {
-      await (
-        await (folio.connect(signer) as any).openAuction(
-          openAuctionArgsLocal.rebalanceNonce,
-          openAuctionArgsLocal.tokens,
-          openAuctionArgsLocal.newWeights,
-          openAuctionArgsLocal.newPrices,
-          openAuctionArgsLocal.newLimits,
-        )
-      ).wait();
+      await submitOpenAuctionForVersion(version, folio, signer, openAuctionArgsLocal);
     });
 
     // advance time to midpoint of auction

@@ -4,10 +4,12 @@ import { bn, D9d, D18d } from "./numbers";
 import { AuctionMetrics, FolioVersion, OpenAuctionArgs, WeightRange } from "./types";
 
 import { Rebalance as Rebalance_4_0_0 } from "./4.0.0/types";
-import { Rebalance as Rebalance_5_0_0 } from "./types";
+import { Rebalance as Rebalance_5_0_0 } from "./5.0.0/types";
+import { Rebalance as Rebalance_6_0_0 } from "./6.0.0/types";
 
 import { getOpenAuction as getOpenAuction_4_0_0 } from "./4.0.0/open-auction";
 import { getOpenAuction as getOpenAuction_5_0_0 } from "./5.0.0/open-auction";
+import { getOpenAuction as getOpenAuction_6_0_0 } from "./6.0.0/open-auction";
 
 /**
  * Generator for the `_targetBasket` parameter
@@ -78,7 +80,7 @@ export const getTargetBasket = (
  */
 export const getOpenAuction = (
   version: FolioVersion,
-  _rebalance: Rebalance_5_0_0 | Rebalance_4_0_0,
+  _rebalance: Rebalance_6_0_0 | Rebalance_5_0_0 | Rebalance_4_0_0,
   _supply: bigint,
   _initialSupply: bigint,
   _initialAssets: bigint[] = [],
@@ -89,44 +91,57 @@ export const getOpenAuction = (
   _priceError: number[],
   _finalStageAt: number,
   debug?: boolean,
+  _auctionLength?: bigint,
 ): [OpenAuctionArgs, AuctionMetrics] => {
   if (debug) {
     console.log("getOpenAuction version", version);
   }
 
-  if (version === FolioVersion.V4) {
-    // Folio 4.0.0
-
-    return getOpenAuction_4_0_0(
-      _rebalance as Rebalance_4_0_0,
-      _supply,
-      _initialSupply,
-      _initialAssets,
-      _targetBasket,
-      _assets,
-      _decimals,
-      _prices,
-      _priceError,
-      _finalStageAt,
-      debug,
-    );
-  } else if (version === FolioVersion.V5) {
-    // Folio 5.0.0
-
-    return getOpenAuction_5_0_0(
-      _rebalance as Rebalance_5_0_0,
-      _supply,
-      _initialSupply,
-      _initialAssets,
-      _targetBasket,
-      _assets,
-      _decimals,
-      _prices,
-      _priceError,
-      _finalStageAt,
-      debug,
-    );
-  } else {
-    throw new Error(`unsupported version: ${version}`);
+  switch (version) {
+    case FolioVersion.V4:
+      return getOpenAuction_4_0_0(
+        _rebalance as Rebalance_4_0_0,
+        _supply,
+        _initialSupply,
+        _initialAssets,
+        _targetBasket,
+        _assets,
+        _decimals,
+        _prices,
+        _priceError,
+        _finalStageAt,
+        debug,
+      );
+    case FolioVersion.V5:
+      return getOpenAuction_5_0_0(
+        _rebalance as Rebalance_5_0_0,
+        _supply,
+        _initialSupply,
+        _initialAssets,
+        _targetBasket,
+        _assets,
+        _decimals,
+        _prices,
+        _priceError,
+        _finalStageAt,
+        debug,
+      );
+    case FolioVersion.V6:
+      return getOpenAuction_6_0_0(
+        _rebalance as Rebalance_6_0_0,
+        _supply,
+        _initialSupply,
+        _initialAssets,
+        _targetBasket,
+        _assets,
+        _decimals,
+        _prices,
+        _priceError,
+        _finalStageAt,
+        debug,
+        _auctionLength,
+      );
+    default:
+      throw new Error(`unsupported version: ${version}`);
   }
 };

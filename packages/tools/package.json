@@ -14,7 +14,7 @@
   },
   "license": "BlueOak-1.0.0",
   "peerDependencies": {
-    "@reserve-protocol/dtf-rebalance-lib": "^3.3.0"
+    "@reserve-protocol/dtf-rebalance-lib": "^3.3.1"
   },
   "dependencies": {
     "@reserve-protocol/sdk": "^0.0.3"

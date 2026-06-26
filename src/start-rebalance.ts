@@ -1,10 +1,12 @@
 import { FolioVersion } from "./types";
 
 import { StartRebalanceArgsPartial as StartRebalanceArgsPartial_4_0_0 } from "./4.0.0/types";
-import { StartRebalanceArgsPartial as StartRebalanceArgsPartial_5_0_0 } from "./types";
+import { StartRebalanceArgsPartial as StartRebalanceArgsPartial_5_0_0 } from "./5.0.0/types";
+import { StartRebalanceArgsPartial as StartRebalanceArgsPartial_6_0_0 } from "./6.0.0/types";
 
 import { getStartRebalance as getStartRebalance_4_0_0 } from "./4.0.0/start-rebalance";
 import { getStartRebalance as getStartRebalance_5_0_0 } from "./5.0.0/start-rebalance";
+import { getStartRebalance as getStartRebalance_6_0_0 } from "./6.0.0/start-rebalance";
 
 /**
  * Get the arguments needed to call startRebalance
@@ -23,7 +25,7 @@ import { getStartRebalance as getStartRebalance_5_0_0 } from "./5.0.0/start-reba
  * @param weightControl TRACKING=false, NATIVE=true
  * @param deferWeights Whether to use the full range for weights, only possible for NATIVE DTFs
  *
- * @return StartRebalanceArgsPartial_5_0_0 | StartRebalanceArgsPartial_4_0_0, depending on `version` enum
+ * @return StartRebalanceArgsPartial_6_0_0 | StartRebalanceArgsPartial_5_0_0 | StartRebalanceArgsPartial_4_0_0, depending on `version` enum
  */
 export const getStartRebalance = (
   version: FolioVersion,
@@ -38,43 +40,54 @@ export const getStartRebalance = (
   weightControl: boolean,
   deferWeights: boolean,
   debug?: boolean,
-): StartRebalanceArgsPartial_5_0_0 | StartRebalanceArgsPartial_4_0_0 => {
+): StartRebalanceArgsPartial_6_0_0 | StartRebalanceArgsPartial_5_0_0 | StartRebalanceArgsPartial_4_0_0 => {
   if (debug) {
-    console.log("getOpenAuction version", version);
+    console.log("getStartRebalance version", version);
   }
 
-  if (version === FolioVersion.V4) {
-    // Folio 4.0.0
-
-    return getStartRebalance_4_0_0(
-      _supply,
-      tokens,
-      _assets,
-      decimals,
-      _targetBasket,
-      _prices,
-      _priceError,
-      weightControl,
-      deferWeights,
-      debug,
-    );
-  } else if (version === FolioVersion.V5) {
-    // Folio 5.0.0
-
-    return getStartRebalance_5_0_0(
-      _supply,
-      tokens,
-      _assets,
-      decimals,
-      _targetBasket,
-      _prices,
-      _priceError,
-      _maxAuctionSizes,
-      weightControl,
-      deferWeights,
-      debug,
-    );
-  } else {
-    throw new Error(`unsupported version: ${version}`);
+  switch (version) {
+    case FolioVersion.V4:
+      return getStartRebalance_4_0_0(
+        _supply,
+        tokens,
+        _assets,
+        decimals,
+        _targetBasket,
+        _prices,
+        _priceError,
+        weightControl,
+        deferWeights,
+        debug,
+      );
+    case FolioVersion.V5:
+      return getStartRebalance_5_0_0(
+        _supply,
+        tokens,
+        _assets,
+        decimals,
+        _targetBasket,
+        _prices,
+        _priceError,
+        _maxAuctionSizes,
+        weightControl,
+        deferWeights,
+        debug,
+      );
+    case FolioVersion.V6:
+      return getStartRebalance_6_0_0(
+        _supply,
+        tokens,
+        _assets,
+        decimals,
+        _targetBasket,
+        _prices,
+        _priceError,
+        _maxAuctionSizes,
+        weightControl,
+        deferWeights,
+        debug,
+      );
+    default:
+      throw new Error(`unsupported version: ${version}`);
   }
 };

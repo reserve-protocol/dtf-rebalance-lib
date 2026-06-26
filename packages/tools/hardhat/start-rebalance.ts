@@ -6,8 +6,7 @@ import { whileImpersonating } from "./utils";
 import { getStartRebalance } from "../../../src/start-rebalance";
 import { FolioVersion } from "../../../src/types";
 import type { RebalanceContracts, RebalanceSigners } from "./types";
-import type { StartRebalanceArgsPartial as StartRebalanceArgsPartialV4 } from "../../../src/4.0.0/types";
-import type { StartRebalanceArgsPartial as StartRebalanceArgsPartialV5 } from "../../../src/types";
+import { submitStartRebalanceForVersion, type VersionedStartRebalanceArgs } from "./versioned-folio";
 
 export async function startRebalance(
   version: FolioVersion,
@@ -63,7 +62,7 @@ export async function startRebalance(
   const decimalsArray = tokens.map((token: string) => allDecimalsRec[token]);
   const targetBasketArray = tokens.map((token: string) => targetBasketRec[token]);
 
-  const startRebalanceArgs: StartRebalanceArgsPartialV4 | StartRebalanceArgsPartialV5 = getStartRebalance(
+  const startRebalanceArgs: VersionedStartRebalanceArgs = getStartRebalance(
     version,
     initialSupply,
     tokens,
@@ -95,33 +94,6 @@ export async function startRebalance(
 
   // start rebalance
   await whileImpersonating(hre, await rebalanceManager.getAddress(), async (signer) => {
-    if (version === FolioVersion.V4) {
-      // V4 has a different startRebalance signature than V5; use inline ABI since out/ artifacts are V5
-      const v4Iface = new hre.ethers.Interface([
-        "function startRebalance(address[] tokens, (uint256 low, uint256 spot, uint256 high)[] weights, (uint256 low, uint256 high)[] prices, (uint256 low, uint256 spot, uint256 high) limits, uint256 auctionLauncherWindow, uint256 ttl)",
-      ]);
-      const v4Folio = new hre.ethers.Contract(await folio.getAddress(), v4Iface, signer);
-      await (
-        await v4Folio.startRebalance(
-          (startRebalanceArgs as StartRebalanceArgsPartialV4).tokens,
-          (startRebalanceArgs as StartRebalanceArgsPartialV4).weights,
-          (startRebalanceArgs as StartRebalanceArgsPartialV4).prices,
-          (startRebalanceArgs as StartRebalanceArgsPartialV4).limits,
-          0n,
-          1000000n,
-        )
-      ).wait();
-    } else if (version === FolioVersion.V5) {
-      await (
-        await (folio.connect(signer) as any).startRebalance(
-          (startRebalanceArgs as StartRebalanceArgsPartialV5).tokens,
-          (startRebalanceArgs as StartRebalanceArgsPartialV5).limits,
-          0n,
-          1000000n,
-        )
-      ).wait();
-    } else {
-      throw new Error(`Unsupported version: ${version}`);
-    }
+    await submitStartRebalanceForVersion(version, hre, folio, signer, startRebalanceArgs);
   });
 }

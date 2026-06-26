@@ -3,6 +3,7 @@
 export enum FolioVersion {
   V4 = 4,
   V5 = 5,
+  V6 = 6,
 }
 
 // === FOLIO DATA STRUCTURES ===
@@ -108,6 +109,7 @@ export interface OpenAuctionArgs {
   newWeights: WeightRange[];
   newPrices: PriceRange[];
   newLimits: RebalanceLimits;
+  auctionLength?: bigint;
 }
 
 // ======================

@@ -3,15 +3,8 @@ import { strict as assert } from "node:assert";
 
 import { bn } from "../../src/numbers";
 
-import {
-  FolioVersion,
-  PriceControl,
-  PriceRange,
-  Rebalance,
-  RebalanceLimits,
-  StartRebalanceArgsPartial as StartRebalanceArgsPartial_5_0_0,
-  WeightRange,
-} from "../../src/types";
+import { FolioVersion, PriceControl, PriceRange, RebalanceLimits, WeightRange } from "../../src/types";
+import { Rebalance, StartRebalanceArgsPartial as StartRebalanceArgsPartial_5_0_0 } from "../../src/5.0.0/types";
 
 import { getBasketDistribution } from "../../src/utils";
 

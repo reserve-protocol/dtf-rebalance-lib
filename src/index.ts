@@ -10,4 +10,8 @@ export type {
 export type {
   Rebalance as RebalanceV5,
   StartRebalanceArgsPartial as StartRebalanceArgsPartialV5,
-} from "./types";
+} from "./5.0.0/types";
+export type {
+  Rebalance as RebalanceV6,
+  StartRebalanceArgsPartial as StartRebalanceArgsPartialV6,
+} from "./6.0.0/types";
