@@ -5,7 +5,7 @@ import { StartRebalanceArgsPartial } from "./types";
  * Get the arguments needed to call Folio 6.0.0 startRebalance.
  *
  * 6.0.0 uses the same token rebalance parameter math as 5.0.0; the on-chain ABI
- * additionally requires the expected rebalance nonce, which is supplied by the caller.
+ * additionally requires the expected rebalance nonce and a deadline, which are supplied by the caller.
  */
 export const getStartRebalance = (
   _supply: bigint,
