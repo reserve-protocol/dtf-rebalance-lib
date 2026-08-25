@@ -119,7 +119,14 @@ export async function submitStartRebalanceForVersion(
       const v6Args = startRebalanceArgs as StartRebalanceArgsPartialV6;
       const [nonce] = await folio.getRebalance();
       await (
-        await (folio.connect(signer) as any).startRebalance(nonce + 1n, v6Args.tokens, v6Args.limits, 0n, 1000000n)
+        await (folio.connect(signer) as any).startRebalance(
+          nonce + 1n,
+          v6Args.tokens,
+          v6Args.limits,
+          0n,
+          1000000n,
+          hre.ethers.MaxUint256,
+        )
       ).wait();
       return;
     }

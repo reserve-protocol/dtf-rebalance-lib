@@ -61,7 +61,7 @@ Each call to `getOpenAuction()` produces one of three round types:
 | `deferWeights` | `boolean` | Use full weight range (native only) |
 | `debug` | `boolean?` | Log debug output |
 
-**Returns** `StartRebalanceArgsPartial` -- contains `tokens` (with weight ranges, price ranges, and max auction sizes per token for `V5`/`V6`) and `limits` (low/spot/high). Folio `V6` additionally requires the caller to pass the expected rebalance nonce to the on-chain `startRebalance()` call.
+**Returns** `StartRebalanceArgsPartial` -- contains `tokens` (with weight ranges, price ranges, and max auction sizes per token for `V5`/`V6`) and `limits` (low/spot/high). Folio `V6` additionally requires the caller to pass the expected rebalance nonce and a deadline to the on-chain `startRebalance()` call.
 
 ### `getOpenAuction()`
 
@@ -87,7 +87,7 @@ Each call to `getOpenAuction()` produces one of three round types:
 
 The default exported `Rebalance` and `StartRebalanceArgsPartial` types match the `V5` shape for compatibility. Version-specific aliases are also exported: `RebalanceV4`, `RebalanceV5`, `RebalanceV6`, `StartRebalanceArgsPartialV4`, `StartRebalanceArgsPartialV5`, and `StartRebalanceArgsPartialV6`.
 
-Folio `V6` uses the same rebalance math as `V5`, plus protocol ABI differences: `startRebalance()` requires an expected nonce and `openAuction()` requires `auctionLength`.
+Folio `V6` uses the same rebalance math as `V5`, plus protocol ABI differences: `startRebalance()` requires an expected nonce and deadline, and `openAuction()` requires `auctionLength`.
 
 ## Utility functions
 
